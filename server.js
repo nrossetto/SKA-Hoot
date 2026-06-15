@@ -22,7 +22,6 @@ const SENHA_MESTRA = process.env.SENHA_MESTRA || 'ska2026';
 const upload = multer({ storage: multer.memoryStorage() });
 
 // ============ CONEXÃO COM POSTGRESQL ============
-// Usar variável de ambiente DATABASE_URL ou conectar localmente
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/skahoot',
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
@@ -45,7 +44,6 @@ pool.connect((err, client, release) => {
 async function initDatabase() {
   const client = await pool.connect();
   try {
-    // Tabela de quizzes
     await client.query(`
       CREATE TABLE IF NOT EXISTS quizzes (
         id SERIAL PRIMARY KEY,
@@ -58,7 +56,6 @@ async function initDatabase() {
       )
     `);
     
-    // Tabela de perguntas
     await client.query(`
       CREATE TABLE IF NOT EXISTS perguntas (
         id SERIAL PRIMARY KEY,
@@ -79,7 +76,6 @@ async function initDatabase() {
       )
     `);
     
-    // Tabela de partidas
     await client.query(`
       CREATE TABLE IF NOT EXISTS partidas (
         id SERIAL PRIMARY KEY,
@@ -184,7 +180,6 @@ app.post('/api/quiz/salvar', upload.single('logo'), async (req, res) => {
   try {
     await client.query('BEGIN');
     
-    // Atualizar dados do quiz
     let updateQuery = 'UPDATE quizzes SET nome = $1, cor_fundo = $2';
     let params = [nome, cor_fundo];
     
@@ -197,11 +192,8 @@ app.post('/api/quiz/salvar', upload.single('logo'), async (req, res) => {
     params.push(quiz_id);
     
     await client.query(updateQuery, params);
-    
-    // Deletar perguntas antigas
     await client.query('DELETE FROM perguntas WHERE quiz_id = $1', [quiz_id]);
     
-    // Inserir novas perguntas
     const perguntasData = JSON.parse(perguntas);
     
     for (const p of perguntasData) {
@@ -246,7 +238,7 @@ app.delete('/api/quiz/deletar/:id', async (req, res) => {
 
 // Criar sala para um quiz
 app.post('/api/sala/criar', async (req, res) => {
-  const { quiz_id, modoNomes, quizNome } = req.body;
+  const { quiz_id, quizNome } = req.body;
   const codigo = gerarCodigo();
   
   try {
@@ -268,7 +260,7 @@ app.post('/api/sala/criar', async (req, res) => {
       perguntaAtual: -1,
       ativo: true,
       jogoAtivo: false,
-      modoNomes: modoNomes || 'digitado',
+      pausado: false,
       respostasPerguntaAtual: {}
     };
     
@@ -301,11 +293,32 @@ app.get('/api/sala/config/:codigo', async (req, res) => {
   }
 });
 
+// Deletar histórico
+app.delete('/api/historico/deletar', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM partidas');
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.json({ sucesso: false, erro: err.message });
+  }
+});
+
+// Buscar histórico
+app.get('/api/historico', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM partidas ORDER BY data_hora DESC LIMIT 50');
+    res.json({ sucesso: true, historico: result.rows });
+  } catch (err) {
+    res.json({ sucesso: false, erro: err.message });
+  }
+});
+
 // ============ SOCKET.IO ============
 
 io.on('connection', (socket) => {
   console.log('Novo jogador conectado:', socket.id);
 
+  // Jogador entra na sala
   socket.on('entrar-sala', (data) => {
     const { codigo, nome } = data;
     
@@ -337,20 +350,53 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Host conecta como controlador
+  socket.on('host-conectar', (codigo) => {
+    if (salas[codigo]) {
+      socket.join(`host_${codigo}`);
+      socket.emit('host-entrada-aceita', { sucesso: true });
+      // Enviar lista de jogadores atual
+      socket.emit('atualizar-jogadores', Object.values(salas[codigo].jogadores));
+      enviarRanking(codigo);
+    }
+  });
+
+  // Pausar jogo
+  socket.on('pausar-jogo', (codigo) => {
+    const sala = salas[codigo];
+    if (sala && sala.jogoAtivo) {
+      sala.pausado = true;
+      io.to(codigo).emit('jogo-pausado');
+    }
+  });
+
+  // Retomar jogo
+  socket.on('retomar-jogo', (codigo) => {
+    const sala = salas[codigo];
+    if (sala && sala.jogoAtivo) {
+      sala.pausado = false;
+      io.to(codigo).emit('jogo-retomado');
+      // Continuar o timer
+    }
+  });
+
+  // Iniciar jogo
   socket.on('iniciar-jogo', (codigo) => {
     if (salas[codigo] && salas[codigo].perguntas.length > 0) {
       salas[codigo].jogoAtivo = true;
+      salas[codigo].pausado = false;
       salas[codigo].perguntaAtual = 0;
       io.to(codigo).emit('jogo-iniciado');
       enviarPergunta(codigo, 0);
     }
   });
 
+  // Receber resposta do jogador
   socket.on('responder', (data) => {
-    const { codigo, perguntaId, resposta, tempoRestante } = data;
+    const { codigo, resposta, tempoRestante } = data;
     const sala = salas[codigo];
     
-    if (!sala || !sala.jogoAtivo) return;
+    if (!sala || !sala.jogoAtivo || sala.pausado) return;
     
     const pergunta = sala.perguntas[sala.perguntaAtual];
     if (!pergunta) return;
@@ -396,6 +442,7 @@ io.on('connection', (socket) => {
     }
   });
   
+  // Próxima pergunta (host)
   socket.on('proxima-pergunta', (codigo) => {
     proximaPergunta(codigo);
   });
@@ -440,13 +487,26 @@ io.on('connection', (socket) => {
     };
     
     io.to(codigo).emit('nova-pergunta-jogador', dadosJogador);
-    io.to(codigo).emit('nova-pergunta-host', dadosHost);
+    io.to(`host_${codigo}`).emit('nova-pergunta-host', dadosHost);
     
-    setTimeout(() => {
-      if (sala.perguntaAtual === indice && sala.jogoAtivo) {
-        proximaPergunta(codigo);
+    // Timer automático para avançar (se não pausado)
+    let tempoRestante = pergunta.tempo;
+    const timerInterval = setInterval(() => {
+      if (!sala.jogoAtivo) {
+        clearInterval(timerInterval);
+        return;
       }
-    }, pergunta.tempo * 1000);
+      
+      if (sala.pausado) return;
+      
+      tempoRestante--;
+      if (tempoRestante <= 0) {
+        clearInterval(timerInterval);
+        if (sala.perguntaAtual === indice && sala.jogoAtivo) {
+          proximaPergunta(codigo);
+        }
+      }
+    }, 1000);
   }
   
   function enviarRanking(codigo) {
@@ -458,6 +518,7 @@ io.on('connection', (socket) => {
       .map((j, i) => ({ posicao: i + 1, nome: j.nome, pontuacao: j.pontuacao, emoji: j.emoji }));
     
     io.to(codigo).emit('atualizar-ranking', ranking);
+    io.to(`host_${codigo}`).emit('atualizar-ranking', ranking);
   }
   
   function proximaPergunta(codigo) {
@@ -492,6 +553,7 @@ io.on('connection', (socket) => {
     }
     
     io.to(codigo).emit('fim-jogo', { ranking: ranking });
+    io.to(`host_${codigo}`).emit('fim-jogo', { ranking: ranking });
     sala.jogoAtivo = false;
   }
   
@@ -500,6 +562,7 @@ io.on('connection', (socket) => {
       if (salas[codigo].jogadores[socket.id]) {
         delete salas[codigo].jogadores[socket.id];
         io.to(codigo).emit('atualizar-jogadores', Object.values(salas[codigo].jogadores));
+        io.to(`host_${codigo}`).emit('atualizar-jogadores', Object.values(salas[codigo].jogadores));
         enviarRanking(codigo);
         break;
       }
@@ -512,6 +575,10 @@ app.get('/host', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'host.html'));
 });
 
+app.get('/game-control', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'game-control.html'));
+});
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -519,7 +586,7 @@ app.get('*', (req, res) => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`
   ╔═══════════════════════════════════════╗
-  ║     🎮 SKA-HOOT 2.0 Iniciado! 🎮      ║
+  ║     🎮 SKA-HOOT 2.0 FINAL! 🎮         ║
   ╠═══════════════════════════════════════╣
   ║  Acesse: http://localhost:${PORT}      ║
   ║  Tela do Host: http://localhost:${PORT}/host ║

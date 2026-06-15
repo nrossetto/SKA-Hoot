@@ -284,6 +284,7 @@ body {
     border-radius: 10px;
 }
 
+/* Botões de Resposta - CORES CORRIGIDAS */
 .respostas-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -314,14 +315,45 @@ body {
     font-weight: bold;
 }
 
-.resposta-a { background: var(--cor-a); color: white; }
-.resposta-a:active { background: var(--cor-a-hover); }
-.resposta-b { background: var(--cor-b); color: white; }
-.resposta-b:active { background: var(--cor-b-hover); }
-.resposta-c { background: var(--cor-c); color: white; }
-.resposta-c:active { background: var(--cor-c-hover); }
-.resposta-d { background: var(--cor-d); color: #2c3e50; }
-.resposta-d:active { background: var(--cor-d-hover); }
+/* Cores de fundo dos botões */
+.resposta-a { 
+    background: var(--cor-a); 
+    color: white; 
+}
+.resposta-a:active { 
+    background: var(--cor-a-hover); 
+}
+
+.resposta-b { 
+    background: var(--cor-b); 
+    color: white; 
+}
+.resposta-b:active { 
+    background: var(--cor-b-hover); 
+}
+
+.resposta-c { 
+    background: var(--cor-c); 
+    color: white; 
+}
+.resposta-c:active { 
+    background: var(--cor-c-hover); 
+}
+
+.resposta-d { 
+    background: var(--cor-d); 
+    color: white;  /* Texto branco para contraste */
+    text-shadow: 1px 1px 0 rgba(0,0,0,0.3);
+}
+.resposta-d:active { 
+    background: var(--cor-d-hover); 
+}
+
+/* Cor especial para o símbolo do quadrado no botão D */
+.resposta-d .simbolo {
+    color: white;
+    text-shadow: 1px 1px 0 rgba(0,0,0,0.3);
+}
 
 .resposta-btn:disabled {
     opacity: 0.5;
@@ -628,6 +660,11 @@ body {
     width: 40px;
     text-align: center;
 }
+
+.opcao-simbolo.resposta-a { background: none; color: #e74c3c; text-shadow: none; }
+.opcao-simbolo.resposta-b { background: none; color: #2ecc71; text-shadow: none; }
+.opcao-simbolo.resposta-c { background: none; color: #3498db; text-shadow: none; }
+.opcao-simbolo.resposta-d { background: none; color: #f1c40f; text-shadow: none; }
 
 .opcao-item input {
     flex: 1;

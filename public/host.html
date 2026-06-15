@@ -37,6 +37,7 @@
                 <button class="tab-btn" onclick="mostrarTab('editar')">✏️ Criar/Editar Quiz</button>
                 <button class="tab-btn" onclick="mostrarTab('jogar')">🎯 Iniciar Jogo</button>
                 <button class="tab-btn" onclick="mostrarTab('config')">🎨 Personalização</button>
+                <button class="tab-btn" onclick="mostrarTab('historico')">📜 Histórico</button>
             </div>
             
             <!-- Tab 1: Lista de Quizzes -->
@@ -72,33 +73,10 @@
                         <button onclick="criarSala()" class="btn-principal">🚀 CRIAR SALA</button>
                     </div>
                     
-                    <div id="salaAtiva" style="display:none;" class="sala-ativa">
+                    <div id="salaInfo" class="sala-info-box" style="display:none;">
                         <div class="codigo-sala-grande" id="codigoSalaDisplay"></div>
-                        <div class="controles-jogo">
-                            <button onclick="iniciarJogo()" class="btn-jogo">▶ INICIAR JOGO</button>
-                            <button onclick="proximaPergunta()" class="btn-jogo">⏭ PRÓXIMA</button>
-                            <button onclick="encerrarJogo()" class="btn-jogo-danger">⏹ ENCERRAR</button>
-                        </div>
-                        
-                        <!-- Espelho da Pergunta (Admin vê o completo) -->
-                        <div class="espelho-pergunta" id="espelhoPergunta">
-                            <h3>📺 ESPELHO DA PERGUNTA</h3>
-                            <div id="espelhoConteudo" class="espelho-conteudo">
-                                Aguardando início do jogo...
-                            </div>
-                        </div>
-                        
-                        <!-- Jogadores e Ranking -->
-                        <div class="jogadores-ranking">
-                            <div class="jogadores-sala">
-                                <h3>👥 Jogadores na sala (<span id="totalJogadores">0</span>)</h3>
-                                <div id="listaJogadoresHost" class="lista-jogadores-host"></div>
-                            </div>
-                            <div class="ranking-sala">
-                                <h3>🏆 Ranking ao vivo</h3>
-                                <div id="rankingHost" class="ranking-host"></div>
-                            </div>
-                        </div>
+                        <div class="link-controle" id="linkControleDisplay"></div>
+                        <p>📌 Abra o link acima em uma nova aba para controlar o jogo!</p>
                     </div>
                 </div>
             </div>
@@ -123,6 +101,15 @@
                     </div>
                     <button onclick="salvarConfigQuiz()" class="btn-principal">💾 Salvar Configurações</button>
                 </div>
+            </div>
+            
+            <!-- Tab 5: Histórico -->
+            <div id="tabHistorico" class="tab-content" style="display:none;">
+                <div class="historico-header">
+                    <button onclick="carregarHistorico()" class="btn-pequeno">🔄 Atualizar</button>
+                    <button onclick="deletarHistorico()" class="btn-pequeno-danger">🗑️ Deletar todo histórico</button>
+                </div>
+                <div id="listaHistorico" class="historico-lista"></div>
             </div>
         </div>
     </div>

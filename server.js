@@ -19,16 +19,10 @@ const io = socketIo(server, {
 const PORT = process.env.PORT || 3000;
 const SENHA_MESTRA = process.env.SENHA_MESTRA || 'ska2026';
 
-// Configurar armazenamento de arquivos (imagens e músicas)
+// Configurar armazenamento de arquivos
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, 'public/uploads/');
-    } else if (file.mimetype.startsWith('audio/')) {
-      cb(null, 'public/uploads/');
-    } else {
-      cb(null, 'public/uploads/');
-    }
+    cb(null, 'public/uploads/');
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -52,7 +46,6 @@ const pool = new Pool({
   connectionTimeoutMillis: 2000,
 });
 
-// Testar conexão
 pool.connect((err, client, release) => {
   if (err) {
     console.error('❌ Erro ao conectar ao PostgreSQL:', err.stack);
@@ -62,41 +55,35 @@ pool.connect((err, client, release) => {
   }
 });
 
-// ============ CRIAÇÃO DAS TABELAS ============
+// ============ CRIAÇÃO DAS TABELAS COM MIGRAÇÕES ============
 async function initDatabase() {
   const client = await pool.connect();
   try {
+    // Tabela de quizzes
     await client.query(`
       CREATE TABLE IF NOT EXISTS quizzes (
         id SERIAL PRIMARY KEY,
         nome TEXT UNIQUE NOT NULL,
-        data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        musica_url TEXT,
-        cor_fundo TEXT DEFAULT '#667eea',
-        logo_base64 TEXT,
-        logo_tipo TEXT
+        data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     
+    // Tabela de perguntas
     await client.query(`
       CREATE TABLE IF NOT EXISTS perguntas (
         id SERIAL PRIMARY KEY,
         quiz_id INTEGER REFERENCES quizzes(id) ON DELETE CASCADE,
         texto TEXT,
-        imagem_url TEXT,
         opcao_a_texto TEXT,
-        opcao_a_botao TEXT,
         opcao_b_texto TEXT,
-        opcao_b_botao TEXT,
         opcao_c_texto TEXT,
-        opcao_c_botao TEXT,
         opcao_d_texto TEXT,
-        opcao_d_botao TEXT,
         correta CHAR(1),
         tempo INTEGER DEFAULT 15
       )
     `);
     
+    // Tabela de partidas
     await client.query(`
       CREATE TABLE IF NOT EXISTS partidas (
         id SERIAL PRIMARY KEY,
@@ -107,7 +94,45 @@ async function initDatabase() {
       )
     `);
     
-    console.log('✅ Tabelas criadas/verificadas com sucesso!');
+    // MIGRAÇÕES: Adicionar todas as colunas que podem estar faltando
+    console.log('🔄 Verificando migrações...');
+    
+    // Colunas da tabela quizzes
+    const quizColumns = [
+      'ADD COLUMN IF NOT EXISTS musica_url TEXT',
+      'ADD COLUMN IF NOT EXISTS cor_fundo TEXT DEFAULT \'#667eea\'',
+      'ADD COLUMN IF NOT EXISTS logo_base64 TEXT',
+      'ADD COLUMN IF NOT EXISTS logo_tipo TEXT'
+    ];
+    
+    for (const col of quizColumns) {
+      try {
+        await client.query(`ALTER TABLE quizzes ${col}`);
+        console.log(`  ✅ quizzes: ${col}`);
+      } catch (err) {
+        console.log(`  ⚠️ quizzes: ${col} - ${err.message}`);
+      }
+    }
+    
+    // Colunas da tabela perguntas
+    const perguntaColumns = [
+      'ADD COLUMN IF NOT EXISTS imagem_url TEXT',
+      'ADD COLUMN IF NOT EXISTS opcao_a_botao TEXT',
+      'ADD COLUMN IF NOT EXISTS opcao_b_botao TEXT',
+      'ADD COLUMN IF NOT EXISTS opcao_c_botao TEXT',
+      'ADD COLUMN IF NOT EXISTS opcao_d_botao TEXT'
+    ];
+    
+    for (const col of perguntaColumns) {
+      try {
+        await client.query(`ALTER TABLE perguntas ${col}`);
+        console.log(`  ✅ perguntas: ${col}`);
+      } catch (err) {
+        console.log(`  ⚠️ perguntas: ${col} - ${err.message}`);
+      }
+    }
+    
+    console.log('✅ Migrações aplicadas com sucesso!');
   } catch (err) {
     console.error('❌ Erro ao criar tabelas:', err);
   } finally {
@@ -125,20 +150,17 @@ app.use('/uploads', express.static('public/uploads'));
 // Estado do jogo em memória
 let salas = {};
 
-// Gerar código numérico de 4 dígitos
 function gerarCodigo() {
   return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
 // ============ API ROTAS ============
 
-// Verificar senha
 app.post('/api/verificar-senha', (req, res) => {
   const { senha } = req.body;
   res.json({ sucesso: senha === SENHA_MESTRA });
 });
 
-// Upload de música
 app.post('/api/upload/musica', upload.single('musica'), (req, res) => {
   if (!req.file) {
     return res.json({ sucesso: false, erro: 'Nenhum arquivo enviado' });
@@ -147,7 +169,6 @@ app.post('/api/upload/musica', upload.single('musica'), (req, res) => {
   res.json({ sucesso: true, url: url });
 });
 
-// Upload de imagem para pergunta
 app.post('/api/upload/imagem', upload.single('imagem'), (req, res) => {
   if (!req.file) {
     return res.json({ sucesso: false, erro: 'Nenhum arquivo enviado' });
@@ -156,7 +177,6 @@ app.post('/api/upload/imagem', upload.single('imagem'), (req, res) => {
   res.json({ sucesso: true, url: url });
 });
 
-// Criar novo quiz
 app.post('/api/quiz/criar', async (req, res) => {
   const { nome } = req.body;
   try {
@@ -170,7 +190,6 @@ app.post('/api/quiz/criar', async (req, res) => {
   }
 });
 
-// Listar quizzes
 app.get('/api/quiz/listar', async (req, res) => {
   try {
     const result = await pool.query(
@@ -182,7 +201,6 @@ app.get('/api/quiz/listar', async (req, res) => {
   }
 });
 
-// Carregar quiz completo
 app.get('/api/quiz/carregar/:id', async (req, res) => {
   const quizId = req.params.id;
   try {
@@ -203,7 +221,7 @@ app.get('/api/quiz/carregar/:id', async (req, res) => {
     const quiz = quizResult.rows[0];
     res.json({ 
       sucesso: true, 
-      quiz: { ...quiz, logo_base64: quiz.logo_base64 ? true : false },
+      quiz: quiz,
       perguntas: perguntasResult.rows 
     });
   } catch (err) {
@@ -211,27 +229,18 @@ app.get('/api/quiz/carregar/:id', async (req, res) => {
   }
 });
 
-// Salvar quiz completo
-app.post('/api/quiz/salvar', upload.single('logo'), async (req, res) => {
+app.post('/api/quiz/salvar', async (req, res) => {
   const { quiz_id, nome, cor_fundo, musica_url, perguntas } = req.body;
-  const logoBase64 = req.file ? `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}` : null;
   
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     
-    let updateQuery = 'UPDATE quizzes SET nome = $1, cor_fundo = $2, musica_url = $3';
-    let params = [nome, cor_fundo, musica_url || null];
+    await client.query(
+      'UPDATE quizzes SET nome = $1, cor_fundo = $2, musica_url = $3 WHERE id = $4',
+      [nome, cor_fundo, musica_url || null, quiz_id]
+    );
     
-    if (logoBase64) {
-      updateQuery += ', logo_base64 = $4, logo_tipo = $5';
-      params.push(logoBase64, req.file.mimetype);
-    }
-    
-    updateQuery += ' WHERE id = $' + (params.length + 1);
-    params.push(quiz_id);
-    
-    await client.query(updateQuery, params);
     await client.query('DELETE FROM perguntas WHERE quiz_id = $1', [quiz_id]);
     
     const perguntasData = JSON.parse(perguntas);
@@ -266,7 +275,6 @@ app.post('/api/quiz/salvar', upload.single('logo'), async (req, res) => {
   }
 });
 
-// Deletar quiz
 app.delete('/api/quiz/deletar/:id', async (req, res) => {
   try {
     await pool.query('DELETE FROM quizzes WHERE id = $1', [req.params.id]);
@@ -276,7 +284,6 @@ app.delete('/api/quiz/deletar/:id', async (req, res) => {
   }
 });
 
-// Criar sala para um quiz
 app.post('/api/sala/criar', async (req, res) => {
   const { quiz_id, quizNome } = req.body;
   const codigo = gerarCodigo();
@@ -291,7 +298,6 @@ app.post('/api/sala/criar', async (req, res) => {
       return res.json({ sucesso: false, erro: 'Quiz sem perguntas' });
     }
     
-    // Buscar música do quiz
     const quizResult = await pool.query(
       'SELECT musica_url FROM quizzes WHERE id = $1',
       [quiz_id]
@@ -318,7 +324,6 @@ app.post('/api/sala/criar', async (req, res) => {
   }
 });
 
-// Buscar configuração visual da sala
 app.get('/api/sala/config/:codigo', async (req, res) => {
   const sala = salas[req.params.codigo];
   if (sala) {
@@ -341,7 +346,6 @@ app.get('/api/sala/config/:codigo', async (req, res) => {
   }
 });
 
-// Buscar música da sala
 app.get('/api/sala/musica/:codigo', async (req, res) => {
   const sala = salas[req.params.codigo];
   if (sala && sala.musica_url) {
@@ -351,7 +355,6 @@ app.get('/api/sala/musica/:codigo', async (req, res) => {
   }
 });
 
-// Deletar histórico
 app.delete('/api/historico/deletar', async (req, res) => {
   try {
     await pool.query('DELETE FROM partidas');
@@ -361,7 +364,6 @@ app.delete('/api/historico/deletar', async (req, res) => {
   }
 });
 
-// Buscar histórico
 app.get('/api/historico', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM partidas ORDER BY data_hora DESC LIMIT 50');
@@ -372,11 +374,9 @@ app.get('/api/historico', async (req, res) => {
 });
 
 // ============ SOCKET.IO ============
-
 io.on('connection', (socket) => {
   console.log('Novo jogador conectado:', socket.id);
 
-  // Jogador entra na sala
   socket.on('entrar-sala', (data) => {
     const { codigo, nome } = data;
     
@@ -408,7 +408,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Host conecta como controlador
   socket.on('host-conectar', (codigo) => {
     if (salas[codigo]) {
       socket.join(`host_${codigo}`);
@@ -416,14 +415,12 @@ io.on('connection', (socket) => {
       socket.emit('atualizar-jogadores', Object.values(salas[codigo].jogadores));
       enviarRanking(codigo);
       
-      // Enviar música se houver
       if (salas[codigo].musica_url) {
         socket.emit('musica-url', salas[codigo].musica_url);
       }
     }
   });
 
-  // Pausar jogo
   socket.on('pausar-jogo', (codigo) => {
     const sala = salas[codigo];
     if (sala && sala.jogoAtivo) {
@@ -433,7 +430,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Retomar jogo
   socket.on('retomar-jogo', (codigo) => {
     const sala = salas[codigo];
     if (sala && sala.jogoAtivo) {
@@ -443,7 +439,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Iniciar jogo
   socket.on('iniciar-jogo', (codigo) => {
     if (salas[codigo] && salas[codigo].perguntas.length > 0) {
       salas[codigo].jogoAtivo = true;
@@ -454,7 +449,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Receber resposta do jogador
   socket.on('responder', (data) => {
     const { codigo, resposta, tempoRestante } = data;
     const sala = salas[codigo];
@@ -505,7 +499,6 @@ io.on('connection', (socket) => {
     }
   });
   
-  // Próxima pergunta (host)
   socket.on('proxima-pergunta', (codigo) => {
     proximaPergunta(codigo);
   });
@@ -552,7 +545,6 @@ io.on('connection', (socket) => {
     io.to(codigo).emit('nova-pergunta-jogador', dadosJogador);
     io.to(`host_${codigo}`).emit('nova-pergunta-host', dadosHost);
     
-    // Timer automático para avançar
     let tempoRestante = pergunta.tempo;
     const timerInterval = setInterval(() => {
       if (!sala.jogoAtivo) {

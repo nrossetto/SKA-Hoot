@@ -21,6 +21,7 @@ function verificarSenha() {
             document.getElementById('telaDashboard').style.display = 'block';
             carregarQuizzes();
             carregarSelectQuizzes();
+            carregarHistorico();
         } else {
             alert('Senha incorreta!');
         }
@@ -359,74 +360,54 @@ function criarSala() {
     .then(data => {
         if (data.sucesso) {
             codigoSalaAtual = data.codigo;
-            document.getElementById('salaAtiva').style.display = 'block';
+            const linkControle = `${window.location.origin}/game-control?codigo=${codigoSalaAtual}`;
+            
+            document.getElementById('salaInfo').style.display = 'block';
             document.getElementById('codigoSalaDisplay').innerHTML = `📱 CÓDIGO: ${codigoSalaAtual}`;
-            conectarHost();
+            document.getElementById('linkControleDisplay').innerHTML = `
+                <div class="link-controle-box">
+                    <strong>🔗 Link para controlar o jogo:</strong><br>
+                    <a href="${linkControle}" target="_blank">${linkControle}</a>
+                    <br><br>
+                    <button onclick="navigator.clipboard.writeText('${linkControle}')" class="btn-pequeno">📋 Copiar link</button>
+                </div>
+            `;
         } else {
             alert('Erro: ' + data.erro);
         }
     });
 }
 
-function conectarHost() {
-    if (socket) socket.disconnect();
-    
-    socket = io();
-    
-    socket.on('atualizar-jogadores', (jogadores) => {
-        const lista = document.getElementById('listaJogadoresHost');
-        document.getElementById('totalJogadores').innerText = jogadores.length;
-        lista.innerHTML = jogadores.map(j => `
-            <div class="jogador-item-host">
-                <span>${j.emoji} ${j.nome}</span>
-                <span>${j.pontuacao} pts</span>
-            </div>
-        `).join('');
-    });
-    
-    socket.on('nova-pergunta-host', (data) => {
-        const espelho = document.getElementById('espelhoConteudo');
-        espelho.innerHTML = `
-            <div class="espelho-imagem">${data.pergunta.imagem_base64 ? `<img src="${data.pergunta.imagem_base64}">` : ''}</div>
-            <div class="espelho-texto">${escapeHtml(data.pergunta.texto)}</div>
-            <div class="espelho-opcoes">
-                <div class="opcao completa-a">🔴 ★ ${escapeHtml(data.pergunta.opcoes.A)}</div>
-                <div class="opcao completa-b">🟢 ▲ ${escapeHtml(data.pergunta.opcoes.B)}</div>
-                <div class="opcao completa-c">🔵 ● ${escapeHtml(data.pergunta.opcoes.C)}</div>
-                <div class="opcao completa-d">🟡 ■ ${escapeHtml(data.pergunta.opcoes.D)}</div>
-            </div>
-            <div class="espelho-tempo">⏱ Tempo: ${data.pergunta.tempo} segundos</div>
-        `;
-    });
-    
-    socket.on('atualizar-ranking', (ranking) => {
-        const rankingDiv = document.getElementById('rankingHost');
-        rankingDiv.innerHTML = ranking.slice(0, 10).map(r => `
-            <div class="ranking-item">
-                <span>${r.posicao}º ${r.emoji} ${escapeHtml(r.nome)}</span>
-                <strong>${r.pontuacao} pts</strong>
-            </div>
-        `).join('');
-    });
-    
-    socket.on('fim-jogo', (data) => {
-        alert(`Jogo finalizado! Vencedor: ${data.ranking[0]?.nome}`);
-    });
+// ============ HISTÓRICO ============
+function carregarHistorico() {
+    fetch('/api/historico')
+        .then(res => res.json())
+        .then(data => {
+            if (data.sucesso) {
+                const lista = document.getElementById('listaHistorico');
+                if (data.historico.length === 0) {
+                    lista.innerHTML = '<div class="empty-state">Nenhum histórico encontrado</div>';
+                } else {
+                    lista.innerHTML = data.historico.map(h => `
+                        <div class="historico-card">
+                            <strong>📅 ${new Date(h.data_hora).toLocaleString()}</strong><br>
+                            🎯 Quiz ID: ${h.quiz_id}<br>
+                            🔢 Código da sala: ${h.codigo}<br>
+                            🏆 Ranking salvo
+                        </div>
+                    `).join('');
+                }
+            }
+        });
 }
 
-function iniciarJogo() {
-    if (confirm('Iniciar o jogo agora?')) {
-        socket.emit('iniciar-jogo', codigoSalaAtual);
-    }
-}
-
-function proximaPergunta() {
-    socket.emit('proxima-pergunta', codigoSalaAtual);
-}
-
-function encerrarJogo() {
-    if (confirm('Encerrar o jogo?')) {
-        location.reload();
+function deletarHistorico() {
+    if (confirm('⚠️ Deletar todo o histórico? Essa ação não pode ser desfeita!')) {
+        fetch('/api/historico/deletar', { method: 'DELETE' })
+            .then(() => {
+                alert('Histórico deletado!');
+                carregarHistorico();
+            });
     }
 }
 
@@ -468,9 +449,14 @@ function mostrarTab(tab) {
     document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     
-    const tabs = { quizzes: 0, editar: 1, jogar: 2, config: 3 };
-    document.getElementById(`tab${tab.charAt(0).toUpperCase() + tab.slice(1)}`).style.display = 'block';
+    const tabs = { quizzes: 0, editar: 1, jogar: 2, config: 3, historico: 4 };
+    const tabName = tab.charAt(0).toUpperCase() + tab.slice(1);
+    document.getElementById(`tab${tabName}`).style.display = 'block';
     document.querySelectorAll('.tab-btn')[tabs[tab]].classList.add('active');
+    
+    if (tab === 'historico') {
+        carregarHistorico();
+    }
 }
 
 function escapeHtml(text) {

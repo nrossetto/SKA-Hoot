@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SKA-HOOT - Painel do Host</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body class="host-body">
+    <!-- Música de fundo -->
+    <audio id="musicaFundo" loop>
+        <source src="" id="musicaSource" type="audio/mpeg">
+    </audio>
+    
+    <div class="container host-container">
+        <!-- Tela de Login -->
+        <div id="telaLogin" class="login-container">
+            <h1>🔐 SKA-HOOT Host</h1>
+            <input type="password" id="senha" placeholder="Senha mestra" class="input-grande">
+            <button onclick="verificarSenha()" class="btn-principal">Entrar</button>
+        </div>
+        
+        <!-- Dashboard Principal -->
+        <div id="telaDashboard" style="display:none;">
+            <!-- Top Bar -->
+            <div class="dashboard-header">
+                <h1>🎮 SKA-HOOT 2.0</h1>
+                <div class="header-controls">
+                    <button onclick="toggleMusica()" id="btnMusica" class="btn-icon">🎵 Tocar</button>
+                    <button onclick="logout()" class="btn-icon">🚪 Sair</button>
+                </div>
+            </div>
+            
+            <!-- Abas -->
+            <div class="tabs">
+                <button class="tab-btn active" onclick="mostrarTab('quizzes')">📚 Meus Quizzes</button>
+                <button class="tab-btn" onclick="mostrarTab('editar')">✏️ Criar/Editar Quiz</button>
+                <button class="tab-btn" onclick="mostrarTab('jogar')">🎯 Iniciar Jogo</button>
+                <button class="tab-btn" onclick="mostrarTab('config')">🎨 Personalização</button>
+            </div>
+            
+            <!-- Tab 1: Lista de Quizzes -->
+            <div id="tabQuizzes" class="tab-content">
+                <div class="quizzes-grid" id="quizzesGrid"></div>
+                <button onclick="criarNovoQuiz()" class="btn-secundario">+ Criar Novo Quiz</button>
+            </div>
+            
+            <!-- Tab 2: Editor de Quiz -->
+            <div id="tabEditar" class="tab-content" style="display:none;">
+                <div class="editor-header">
+                    <select id="quizSelecionado" onchange="carregarQuiz(this.value)">
+                        <option value="">-- Selecione um quiz ou crie novo --</option>
+                    </select>
+                    <input type="text" id="quizNome" placeholder="Nome do Quiz" class="input-medio">
+                    <button onclick="salvarQuiz()" class="btn-principal-pequeno">💾 Salvar Quiz</button>
+                </div>
+                
+                <div id="editorPerguntas" class="editor-perguntas">
+                    <!-- Perguntas serão inseridas aqui via JS -->
+                </div>
+                
+                <button onclick="adicionarPergunta()" class="btn-secundario">+ Adicionar Pergunta</button>
+            </div>
+            
+            <!-- Tab 3: Iniciar Jogo -->
+            <div id="tabJogar" class="tab-content" style="display:none;">
+                <div class="jogar-container">
+                    <div class="jogar-config">
+                        <select id="quizJogar" onchange="selecionarQuizJogar(this.value)">
+                            <option value="">-- Selecione um quiz para jogar --</option>
+                        </select>
+                        <button onclick="criarSala()" class="btn-principal">🚀 CRIAR SALA</button>
+                    </div>
+                    
+                    <div id="salaAtiva" style="display:none;" class="sala-ativa">
+                        <div class="codigo-sala-grande" id="codigoSalaDisplay"></div>
+                        <div class="controles-jogo">
+                            <button onclick="iniciarJogo()" class="btn-jogo">▶ INICIAR JOGO</button>
+                            <button onclick="proximaPergunta()" class="btn-jogo">⏭ PRÓXIMA</button>
+                            <button onclick="encerrarJogo()" class="btn-jogo-danger">⏹ ENCERRAR</button>
+                        </div>
+                        
+                        <!-- Espelho da Pergunta (Admin vê o completo) -->
+                        <div class="espelho-pergunta" id="espelhoPergunta">
+                            <h3>📺 ESPELHO DA PERGUNTA</h3>
+                            <div id="espelhoConteudo" class="espelho-conteudo">
+                                Aguardando início do jogo...
+                            </div>
+                        </div>
+                        
+                        <!-- Jogadores e Ranking -->
+                        <div class="jogadores-ranking">
+                            <div class="jogadores-sala">
+                                <h3>👥 Jogadores na sala (<span id="totalJogadores">0</span>)</h3>
+                                <div id="listaJogadoresHost" class="lista-jogadores-host"></div>
+                            </div>
+                            <div class="ranking-sala">
+                                <h3>🏆 Ranking ao vivo</h3>
+                                <div id="rankingHost" class="ranking-host"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Tab 4: Personalização -->
+            <div id="tabConfig" class="tab-content" style="display:none;">
+                <div class="config-panel">
+                    <h3>🎨 Personalização do Quiz</h3>
+                    <div class="config-item">
+                        <label>🎵 Música de fundo (URL MP3):</label>
+                        <input type="text" id="musicaUrl" placeholder="https://exemplo.com/musica.mp3" class="input-grande">
+                        <button onclick="testarMusica()" class="btn-pequeno">▶️ Testar</button>
+                    </div>
+                    <div class="config-item">
+                        <label>🎨 Cor de fundo do jogo:</label>
+                        <input type="color" id="corFundo" value="#667eea">
+                    </div>
+                    <div class="config-item">
+                        <label>🖼️ Logo do jogo:</label>
+                        <input type="file" id="uploadLogo" accept="image/*">
+                        <div id="previewLogo"></div>
+                    </div>
+                    <button onclick="salvarConfigQuiz()" class="btn-principal">💾 Salvar Configurações</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/host.js"></script>
+</body>
+</html>

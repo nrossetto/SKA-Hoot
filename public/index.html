@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>SKA-HOOT - Jogador</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body class="player-body" id="playerBody">
+    <div class="container player-container">
+        <!-- Tela de Entrada -->
+        <div id="telaEntrada" class="tela-entrada">
+            <div class="logo-area" id="logoArea">
+                <h1>🎮 SKA-HOOT</h1>
+            </div>
+            <div class="entrada-sala">
+                <input type="text" id="codigoSala" placeholder="Código da sala" maxlength="4" class="input-grande input-numerico">
+                <input type="text" id="nomeJogador" placeholder="Seu nome" maxlength="20" class="input-grande">
+                <button id="btnEntrar" class="btn-principal">ENTRAR NA SALA</button>
+            </div>
+        </div>
+        
+        <!-- Tela de Sala de Espera -->
+        <div id="telaAguardando" style="display:none;">
+            <div class="sala-espera">
+                <div class="quiz-info">
+                    <h2 id="quizNome"></h2>
+                </div>
+                <div class="seu-card">
+                    <div id="seuNome" class="seu-nome"></div>
+                    <div class="status">Aguardando o jogo começar...</div>
+                </div>
+                <div class="lista-jogadores-container">
+                    <h3>👥 Jogadores na sala</h3>
+                    <div id="listaJogadores" class="lista-jogadores"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tela de Jogo -->
+        <div id="telaJogo" style="display:none;">
+            <div class="game-header">
+                <div class="pontuacao-header">⭐ <span id="pontuacaoAtual">0</span></div>
+                <div class="codigo-sala-mini" id="codigoSalaMini"></div>
+                <div class="ranking-btn" onclick="mostrarRanking()">🏆</div>
+            </div>
+            
+            <div class="pergunta-container">
+                <div class="tempo-restante">
+                    <div class="tempo-bar" id="tempoBar"></div>
+                </div>
+                <div id="imagemPergunta" class="imagem-pergunta"></div>
+                <h2 id="textoPergunta" class="texto-pergunta"></h2>
+            </div>
+            
+            <div class="respostas-grid">
+                <button class="resposta-btn resposta-a" data-resposta="A">
+                    <div class="simbolo">★</div>
+                    <div class="texto-botao" id="botaoA"></div>
+                </button>
+                <button class="resposta-btn resposta-b" data-resposta="B">
+                    <div class="simbolo">▲</div>
+                    <div class="texto-botao" id="botaoB"></div>
+                </button>
+                <button class="resposta-btn resposta-c" data-resposta="C">
+                    <div class="simbolo">●</div>
+                    <div class="texto-botao" id="botaoC"></div>
+                </button>
+                <button class="resposta-btn resposta-d" data-resposta="D">
+                    <div class="simbolo">■</div>
+                    <div class="texto-botao" id="botaoD"></div>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Tela de Feedback -->
+        <div id="telaFeedback" style="display:none;" class="feedback-overlay">
+            <div class="feedback-content">
+                <div id="feedbackIcon" class="feedback-icon"></div>
+                <div id="feedbackMsg" class="feedback-msg"></div>
+                <div id="feedbackPontos" class="feedback-pontos"></div>
+            </div>
+        </div>
+        
+        <!-- Tela de Pódio -->
+        <div id="telaPodio" style="display:none;" class="podio-overlay">
+            <div class="podio-container">
+                <div id="podioContent" class="podio-content"></div>
+                <button onclick="location.reload()" class="btn-principal">🔁 NOVO JOGO</button>
+            </div>
+        </div>
+        
+        <!-- Modal Ranking -->
+        <div id="telaRanking" style="display:none;" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="fecharRanking()">&times;</span>
+                <h2>🏆 Ranking</h2>
+                <div id="listaRanking" class="lista-ranking"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/script.js"></script>
+</body>
+</html>

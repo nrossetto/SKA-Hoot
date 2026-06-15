@@ -631,4 +631,134 @@ body {
 
 .opcao-item input {
     flex: 1;
-    padding
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+}
+
+.pergunta-footer {
+    display: flex;
+    gap: 20px;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #eee;
+}
+
+.jogar-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.jogar-config {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.jogar-config select {
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    flex: 1;
+}
+
+.codigo-sala-grande {
+    text-align: center;
+    font-size: 3em;
+    font-weight: bold;
+    background: #27ae60;
+    color: white;
+    padding: 20px;
+    border-radius: 15px;
+    margin: 20px 0;
+    letter-spacing: 5px;
+}
+
+.link-controle-box {
+    background: #34495e;
+    color: white;
+    padding: 15px;
+    border-radius: 10px;
+    margin: 10px 0;
+    text-align: center;
+}
+
+.link-controle-box a {
+    color: #f1c40f;
+    word-break: break-all;
+}
+
+.config-panel {
+    background: white;
+    border-radius: 15px;
+    padding: 25px;
+}
+
+.config-item {
+    margin-bottom: 20px;
+}
+
+.config-item label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+}
+
+.historico-header {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.historico-card {
+    background: white;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    border-left: 4px solid #3498db;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px;
+    color: #7f8c8d;
+}
+
+.input-numerico {
+    letter-spacing: 5px;
+    font-size: 1.5em;
+    text-align: center;
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+    .respostas-grid {
+        gap: 10px;
+    }
+    .resposta-btn {
+        padding: 15px;
+    }
+    .resposta-btn .simbolo {
+        font-size: 1.8em;
+    }
+    .texto-pergunta {
+        font-size: 1.2em;
+    }
+    .codigo-sala-grande {
+        font-size: 2em;
+    }
+    .tabs {
+        gap: 5px;
+    }
+    .tab-btn {
+        padding: 8px 12px;
+        font-size: 0.8em;
+    }
+    .opcoes-espelho {
+        grid-template-columns: 1fr;
+    }
+}

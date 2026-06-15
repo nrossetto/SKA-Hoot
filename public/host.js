@@ -3,7 +3,6 @@ let codigoSalaAtual = '';
 let quizAtual = null;
 let perguntasAtuais = [];
 let quizIdAtual = null;
-let musicaAtiva = false;
 
 // ============ LOGIN ============
 function verificarSenha() {
@@ -46,6 +45,7 @@ function carregarQuizzes() {
                         <div class="quiz-card">
                             <h3>${escapeHtml(q.nome)}</h3>
                             <p>Criado em: ${new Date(q.data_criacao).toLocaleDateString()}</p>
+                            ${q.musica_url ? '<p>🎵 Com música</p>' : ''}
                             <div class="quiz-card-buttons">
                                 <button onclick="editarQuiz(${q.id})" class="btn-pequeno">✏️ Editar</button>
                                 <button onclick="deletarQuiz(${q.id})" class="btn-pequeno-danger">🗑️ Deletar</button>
@@ -118,6 +118,69 @@ function deletarQuiz(id) {
     }
 }
 
+// ============ UPLOAD ============
+function uploadMusica() {
+    const fileInput = document.getElementById('uploadMusica');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert('Selecione um arquivo MP3');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('musica', file);
+    
+    fetch('/api/upload/musica', {
+        method: 'POST',
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.sucesso) {
+            document.getElementById('musicaUrl').value = data.url;
+            document.getElementById('musicaPreview').innerHTML = `
+                <audio controls style="width: 100%;">
+                    <source src="${data.url}" type="audio/mpeg">
+                </audio>
+                <p>✅ Música carregada!</p>
+            `;
+        } else {
+            alert('Erro ao fazer upload: ' + data.erro);
+        }
+    });
+}
+
+function uploadLogo() {
+    const fileInput = document.getElementById('uploadLogo');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert('Selecione uma imagem');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('imagem', file);
+    
+    fetch('/api/upload/imagem', {
+        method: 'POST',
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.sucesso) {
+            document.getElementById('logoUrl').value = data.url;
+            document.getElementById('previewLogo').innerHTML = `
+                <img src="${data.url}" style="max-width: 150px; margin-top: 10px;">
+                <p>✅ Logo carregada!</p>
+            `;
+        } else {
+            alert('Erro ao fazer upload: ' + data.erro);
+        }
+    });
+}
+
 // ============ EDITOR DE PERGUNTAS ============
 function carregarQuiz(id) {
     if (!id) return;
@@ -129,12 +192,17 @@ function carregarQuiz(id) {
             if (data.sucesso) {
                 document.getElementById('quizNome').value = data.quiz.nome;
                 document.getElementById('corFundo').value = data.quiz.cor_fundo || '#667eea';
+                if (data.quiz.musica_url) {
+                    document.getElementById('musicaUrl').value = data.quiz.musica_url;
+                    document.getElementById('musicaPreview').innerHTML = `
+                        <audio controls style="width: 100%;">
+                            <source src="${data.quiz.musica_url}" type="audio/mpeg">
+                        </audio>
+                        <p>✅ Música configurada</p>
+                    `;
+                }
                 perguntasAtuais = data.perguntas || [];
                 renderizarPerguntas();
-                
-                if (data.quiz.musica) {
-                    document.getElementById('musicaUrl').value = data.quiz.musica;
-                }
             }
         });
 }
@@ -155,10 +223,11 @@ function renderizarPerguntas() {
             
             <div class="campo-imagem">
                 <label>📸 Imagem da pergunta:</label>
-                <input type="file" class="upload-imagem" data-idx="${idx}" accept="image/*">
+                <input type="file" class="upload-imagem-edit" data-idx="${idx}" accept="image/*">
                 <div class="preview-imagem" id="preview-${idx}">
-                    ${p.imagem_base64 ? `<img src="${p.imagem_base64}" style="max-width: 100px;">` : ''}
+                    ${p.imagem_url ? `<img src="${p.imagem_url}" style="max-width: 100px;">` : ''}
                 </div>
+                <input type="hidden" class="imagem-url" data-idx="${idx}" value="${p.imagem_url || ''}">
             </div>
             
             <input type="text" placeholder="Texto da pergunta" value="${escapeHtml(p.texto || '')}" class="pergunta-texto" data-idx="${idx}">
@@ -203,25 +272,31 @@ function renderizarPerguntas() {
         </div>
     `).join('');
     
-    // Adicionar event listeners para upload de imagens
-    document.querySelectorAll('.upload-imagem').forEach(input => {
-        input.addEventListener('change', (e) => {
+    // Upload de imagens no editor
+    document.querySelectorAll('.upload-imagem-edit').forEach(input => {
+        input.addEventListener('change', async (e) => {
             const idx = parseInt(e.target.dataset.idx);
             const file = e.target.files[0];
             if (file) {
-                const reader = new FileReader();
-                reader.onload = function(ev) {
-                    perguntasAtuais[idx].imagem_base64 = ev.target.result;
-                    perguntasAtuais[idx].imagem_tipo = file.type;
+                const formData = new FormData();
+                formData.append('imagem', file);
+                
+                const response = await fetch('/api/upload/imagem', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (data.sucesso) {
+                    perguntasAtuais[idx].imagem_url = data.url;
                     document.getElementById(`preview-${idx}`).innerHTML = 
-                        `<img src="${ev.target.result}" style="max-width: 100px;">`;
-                };
-                reader.readAsDataURL(file);
+                        `<img src="${data.url}" style="max-width: 100px;">`;
+                    document.querySelector(`.imagem-url[data-idx="${idx}"]`).value = data.url;
+                }
             }
         });
     });
     
-    // Adicionar event listeners para campos de texto
+    // Event listeners para campos de texto
     document.querySelectorAll('.pergunta-texto').forEach(input => {
         input.addEventListener('change', (e) => {
             const idx = parseInt(e.target.dataset.idx);
@@ -265,8 +340,7 @@ function renderizarPerguntas() {
 function adicionarPergunta() {
     perguntasAtuais.push({
         texto: '',
-        imagem_base64: null,
-        imagem_tipo: null,
+        imagem_url: null,
         opcao_a_texto: '',
         opcao_a_botao: '',
         opcao_b_texto: '',
@@ -293,20 +367,21 @@ function salvarQuiz() {
         return;
     }
     
-    const formData = new FormData();
-    formData.append('quiz_id', quizIdAtual);
-    formData.append('nome', nome);
-    formData.append('cor_fundo', document.getElementById('corFundo').value);
-    formData.append('perguntas', JSON.stringify(perguntasAtuais));
+    const musicaUrl = document.getElementById('musicaUrl').value;
+    const corFundo = document.getElementById('corFundo').value;
     
-    const logoFile = document.getElementById('uploadLogo').files[0];
-    if (logoFile) {
-        formData.append('logo', logoFile);
-    }
+    const data = {
+        quiz_id: quizIdAtual,
+        nome: nome,
+        cor_fundo: corFundo,
+        musica_url: musicaUrl,
+        perguntas: JSON.stringify(perguntasAtuais)
+    };
     
     fetch('/api/quiz/salvar', {
         method: 'POST',
-        body: formData
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
     })
     .then(res => res.json())
     .then(data => {
@@ -370,6 +445,7 @@ function criarSala() {
                     <a href="${linkControle}" target="_blank">${linkControle}</a>
                     <br><br>
                     <button onclick="navigator.clipboard.writeText('${linkControle}')" class="btn-pequeno">📋 Copiar link</button>
+                    <button onclick="window.open('${linkControle}', '_blank')" class="btn-pequeno">🎮 Abrir Controle</button>
                 </div>
             `;
         } else {
@@ -408,39 +484,6 @@ function deletarHistorico() {
                 alert('Histórico deletado!');
                 carregarHistorico();
             });
-    }
-}
-
-// ============ MÚSICA ============
-function toggleMusica() {
-    const audio = document.getElementById('musicaFundo');
-    const btn = document.getElementById('btnMusica');
-    
-    if (musicaAtiva) {
-        audio.pause();
-        musicaAtiva = false;
-        btn.innerHTML = '🎵 Tocar';
-    } else {
-        const url = document.getElementById('musicaUrl').value;
-        if (url) {
-            audio.src = url;
-            audio.play().catch(e => console.log('Não foi possível tocar:', e));
-            musicaAtiva = true;
-            btn.innerHTML = '⏸️ Pausar';
-        } else {
-            alert('Configure uma URL de música primeiro!');
-        }
-    }
-}
-
-function testarMusica() {
-    const url = document.getElementById('musicaUrl').value;
-    if (url) {
-        const audio = document.getElementById('musicaFundo');
-        audio.src = url;
-        audio.play().catch(e => alert('Não foi possível tocar. Verifique a URL.'));
-    } else {
-        alert('Digite uma URL de música MP3');
     }
 }
 

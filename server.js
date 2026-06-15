@@ -55,7 +55,7 @@ pool.connect((err, client, release) => {
   }
 });
 
-// ============ CRIAÇÃO DAS TABELAS COM MIGRAÇÕES ============
+// ============ CRIAÇÃO DAS TABELAS ============
 async function initDatabase() {
   const client = await pool.connect();
   try {
@@ -64,20 +64,29 @@ async function initDatabase() {
       CREATE TABLE IF NOT EXISTS quizzes (
         id SERIAL PRIMARY KEY,
         nome TEXT UNIQUE NOT NULL,
-        data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        musica_url TEXT,
+        cor_fundo TEXT DEFAULT '#667eea',
+        logo_base64 TEXT,
+        logo_tipo TEXT
       )
     `);
     
-    // Tabela de perguntas
+    // Tabela de perguntas com 14 colunas
     await client.query(`
       CREATE TABLE IF NOT EXISTS perguntas (
         id SERIAL PRIMARY KEY,
         quiz_id INTEGER REFERENCES quizzes(id) ON DELETE CASCADE,
         texto TEXT,
+        imagem_url TEXT,
         opcao_a_texto TEXT,
+        opcao_a_botao TEXT,
         opcao_b_texto TEXT,
+        opcao_b_botao TEXT,
         opcao_c_texto TEXT,
+        opcao_c_botao TEXT,
         opcao_d_texto TEXT,
+        opcao_d_botao TEXT,
         correta CHAR(1),
         tempo INTEGER DEFAULT 15
       )
@@ -94,45 +103,7 @@ async function initDatabase() {
       )
     `);
     
-    // MIGRAÇÕES: Adicionar todas as colunas que podem estar faltando
-    console.log('🔄 Verificando migrações...');
-    
-    // Colunas da tabela quizzes
-    const quizColumns = [
-      'ADD COLUMN IF NOT EXISTS musica_url TEXT',
-      'ADD COLUMN IF NOT EXISTS cor_fundo TEXT DEFAULT \'#667eea\'',
-      'ADD COLUMN IF NOT EXISTS logo_base64 TEXT',
-      'ADD COLUMN IF NOT EXISTS logo_tipo TEXT'
-    ];
-    
-    for (const col of quizColumns) {
-      try {
-        await client.query(`ALTER TABLE quizzes ${col}`);
-        console.log(`  ✅ quizzes: ${col}`);
-      } catch (err) {
-        console.log(`  ⚠️ quizzes: ${col} - ${err.message}`);
-      }
-    }
-    
-    // Colunas da tabela perguntas
-    const perguntaColumns = [
-      'ADD COLUMN IF NOT EXISTS imagem_url TEXT',
-      'ADD COLUMN IF NOT EXISTS opcao_a_botao TEXT',
-      'ADD COLUMN IF NOT EXISTS opcao_b_botao TEXT',
-      'ADD COLUMN IF NOT EXISTS opcao_c_botao TEXT',
-      'ADD COLUMN IF NOT EXISTS opcao_d_botao TEXT'
-    ];
-    
-    for (const col of perguntaColumns) {
-      try {
-        await client.query(`ALTER TABLE perguntas ${col}`);
-        console.log(`  ✅ perguntas: ${col}`);
-      } catch (err) {
-        console.log(`  ⚠️ perguntas: ${col} - ${err.message}`);
-      }
-    }
-    
-    console.log('✅ Migrações aplicadas com sucesso!');
+    console.log('✅ Tabelas criadas/verificadas com sucesso!');
   } catch (err) {
     console.error('❌ Erro ao criar tabelas:', err);
   } finally {
@@ -236,16 +207,20 @@ app.post('/api/quiz/salvar', async (req, res) => {
   try {
     await client.query('BEGIN');
     
+    // Atualizar dados do quiz
     await client.query(
       'UPDATE quizzes SET nome = $1, cor_fundo = $2, musica_url = $3 WHERE id = $4',
       [nome, cor_fundo, musica_url || null, quiz_id]
     );
     
+    // Deletar perguntas antigas
     await client.query('DELETE FROM perguntas WHERE quiz_id = $1', [quiz_id]);
     
+    // Inserir novas perguntas
     const perguntasData = JSON.parse(perguntas);
     
     for (const p of perguntasData) {
+      // INSERT com 14 colunas e 14 valores
       await client.query(`
         INSERT INTO perguntas (
           quiz_id, texto, imagem_url,
@@ -256,12 +231,19 @@ app.post('/api/quiz/salvar', async (req, res) => {
           correta, tempo
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       `, [
-        quiz_id, p.texto, p.imagem_url || null,
-        p.opcao_a_texto, p.opcao_a_botao,
-        p.opcao_b_texto, p.opcao_b_botao,
-        p.opcao_c_texto, p.opcao_c_botao,
-        p.opcao_d_texto, p.opcao_d_botao,
-        p.correta, p.tempo || 15
+        quiz_id, 
+        p.texto || '', 
+        p.imagem_url || null,
+        p.opcao_a_texto || '', 
+        p.opcao_a_botao || '',
+        p.opcao_b_texto || '', 
+        p.opcao_b_botao || '',
+        p.opcao_c_texto || '', 
+        p.opcao_c_botao || '',
+        p.opcao_d_texto || '', 
+        p.opcao_d_botao || '',
+        p.correta || 'A', 
+        p.tempo || 15
       ]);
     }
     
@@ -269,6 +251,7 @@ app.post('/api/quiz/salvar', async (req, res) => {
     res.json({ sucesso: true });
   } catch (err) {
     await client.query('ROLLBACK');
+    console.error('Erro ao salvar:', err);
     res.json({ sucesso: false, erro: err.message });
   } finally {
     client.release();

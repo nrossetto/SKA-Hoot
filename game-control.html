@@ -157,6 +157,27 @@
             border-radius: 10px;
             margin: 10px auto;
         }
+        .musica-controle {
+            background: #34495e;
+            padding: 10px 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .musica-controle button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .musica-status {
+            color: #ecf0f1;
+        }
         
         @media (max-width: 768px) {
             .info-panel {
@@ -180,6 +201,17 @@
         <div class="controle-header">
             <h1>🎮 SKA-HOOT - Controle do Jogo</h1>
             <div id="codigoDisplay" class="codigo-sala">---</div>
+        </div>
+        
+        <!-- Player de Música -->
+        <div id="musicaPanel" class="musica-controle" style="display:none;">
+            <span>🎵 Música de fundo:</span>
+            <audio id="musicaPlayer" controls loop style="flex: 1; min-width: 200px;">
+                <source id="musicaSource" src="" type="audio/mpeg">
+            </audio>
+            <button id="btnPlayMusica" onclick="playMusica()">▶ Play</button>
+            <button id="btnPauseMusica" onclick="pauseMusica()">⏸ Pause</button>
+            <span id="musicaStatus" class="musica-status">⏹ Parada</span>
         </div>
         
         <div class="botoes-controle">
@@ -222,6 +254,7 @@
         let timerInterval;
         let tempoAtual = 0;
         let pausado = false;
+        let musicaUrl = null;
         
         // Pegar código da URL
         const urlParams = new URLSearchParams(window.location.search);
@@ -244,6 +277,19 @@
                 document.getElementById('codigoDisplay').innerHTML = `📱 CÓDIGO: ${codigoSala}`;
                 document.getElementById('btnIniciar').disabled = false;
                 console.log('✅ Conectado à sala', codigoSala);
+            });
+            
+            socket.on('musica-url', (url) => {
+                musicaUrl = url;
+                if (url) {
+                    const panel = document.getElementById('musicaPanel');
+                    const source = document.getElementById('musicaSource');
+                    const player = document.getElementById('musicaPlayer');
+                    panel.style.display = 'flex';
+                    source.src = url;
+                    player.load();
+                    console.log('🎵 Música carregada:', url);
+                }
             });
             
             socket.on('nova-pergunta-host', (data) => {
@@ -279,6 +325,10 @@
             socket.on('fim-jogo', (data) => {
                 const ranking = data.ranking;
                 const vencedor = ranking[0];
+                
+                // Pausar música
+                const player = document.getElementById('musicaPlayer');
+                player.pause();
                 
                 document.getElementById('espelhoJogo').innerHTML = `
                     <div class="sem-jogo">
@@ -322,8 +372,8 @@
             const espelho = document.getElementById('espelhoJogo');
             
             let imagemHtml = '';
-            if (pergunta.imagem_base64) {
-                imagemHtml = `<img src="${pergunta.imagem_base64}" class="imagem-espelho">`;
+            if (pergunta.imagem_url) {
+                imagemHtml = `<img src="${pergunta.imagem_url}" class="imagem-espelho">`;
             }
             
             espelho.innerHTML = `
@@ -372,10 +422,35 @@
             }, 1000);
         }
         
+        function playMusica() {
+            const player = document.getElementById('musicaPlayer');
+            const status = document.getElementById('musicaStatus');
+            player.play().then(() => {
+                status.innerHTML = '▶ Tocando';
+            }).catch(e => {
+                console.log('Erro ao tocar:', e);
+                status.innerHTML = '❌ Erro';
+            });
+        }
+        
+        function pauseMusica() {
+            const player = document.getElementById('musicaPlayer');
+            const status = document.getElementById('musicaStatus');
+            player.pause();
+            status.innerHTML = '⏸ Pausada';
+        }
+        
         function iniciarJogo() {
             if (confirm('▶ Iniciar o jogo agora?\n\nOs jogadores serão notificados e a primeira pergunta aparecerá.')) {
                 socket.emit('iniciar-jogo', codigoSala);
                 document.getElementById('btnIniciar').disabled = true;
+                // Tocar música ao iniciar
+                setTimeout(() => {
+                    const player = document.getElementById('musicaPlayer');
+                    if (player.src) {
+                        player.play().catch(e => console.log('Auto-play bloqueado pelo navegador'));
+                    }
+                }, 500);
             }
         }
         
@@ -389,6 +464,10 @@
                 socket.emit('pausar-jogo', codigoSala);
                 document.getElementById('btnPausar').disabled = true;
                 document.getElementById('btnRetomar').disabled = false;
+                // Pausar música
+                const player = document.getElementById('musicaPlayer');
+                player.pause();
+                document.getElementById('musicaStatus').innerHTML = '⏸ Pausada (jogo pausado)';
             }
         }
         
@@ -396,6 +475,12 @@
             socket.emit('retomar-jogo', codigoSala);
             document.getElementById('btnPausar').disabled = false;
             document.getElementById('btnRetomar').disabled = true;
+            // Retomar música
+            const player = document.getElementById('musicaPlayer');
+            if (player.src) {
+                player.play().catch(e => console.log('Erro ao retomar música'));
+                document.getElementById('musicaStatus').innerHTML = '▶ Tocando';
+            }
         }
         
         function sair() {

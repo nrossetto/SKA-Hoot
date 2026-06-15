@@ -4,6 +4,7 @@ const socketIo = require('socket.io');
 const { Pool } = require('pg');
 const path = require('path');
 const multer = require('multer');
+const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
@@ -18,8 +19,29 @@ const io = socketIo(server, {
 const PORT = process.env.PORT || 3000;
 const SENHA_MESTRA = process.env.SENHA_MESTRA || 'ska2026';
 
-// Configurar upload de imagens (em memória para base64)
-const upload = multer({ storage: multer.memoryStorage() });
+// Configurar armazenamento de arquivos (imagens e músicas)
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, 'public/uploads/');
+    } else if (file.mimetype.startsWith('audio/')) {
+      cb(null, 'public/uploads/');
+    } else {
+      cb(null, 'public/uploads/');
+    }
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage: storage });
+
+// Criar pasta de uploads se não existir
+if (!fs.existsSync('public/uploads')) {
+  fs.mkdirSync('public/uploads', { recursive: true });
+}
 
 // ============ CONEXÃO COM POSTGRESQL ============
 const pool = new Pool({
@@ -49,7 +71,7 @@ async function initDatabase() {
         id SERIAL PRIMARY KEY,
         nome TEXT UNIQUE NOT NULL,
         data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        musica TEXT,
+        musica_url TEXT,
         cor_fundo TEXT DEFAULT '#667eea',
         logo_base64 TEXT,
         logo_tipo TEXT
@@ -61,8 +83,7 @@ async function initDatabase() {
         id SERIAL PRIMARY KEY,
         quiz_id INTEGER REFERENCES quizzes(id) ON DELETE CASCADE,
         texto TEXT,
-        imagem_base64 TEXT,
-        imagem_tipo TEXT,
+        imagem_url TEXT,
         opcao_a_texto TEXT,
         opcao_a_botao TEXT,
         opcao_b_texto TEXT,
@@ -99,6 +120,7 @@ initDatabase();
 // Middleware
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
+app.use('/uploads', express.static('public/uploads'));
 
 // Estado do jogo em memória
 let salas = {};
@@ -114,6 +136,24 @@ function gerarCodigo() {
 app.post('/api/verificar-senha', (req, res) => {
   const { senha } = req.body;
   res.json({ sucesso: senha === SENHA_MESTRA });
+});
+
+// Upload de música
+app.post('/api/upload/musica', upload.single('musica'), (req, res) => {
+  if (!req.file) {
+    return res.json({ sucesso: false, erro: 'Nenhum arquivo enviado' });
+  }
+  const url = `/uploads/${req.file.filename}`;
+  res.json({ sucesso: true, url: url });
+});
+
+// Upload de imagem para pergunta
+app.post('/api/upload/imagem', upload.single('imagem'), (req, res) => {
+  if (!req.file) {
+    return res.json({ sucesso: false, erro: 'Nenhum arquivo enviado' });
+  }
+  const url = `/uploads/${req.file.filename}`;
+  res.json({ sucesso: true, url: url });
 });
 
 // Criar novo quiz
@@ -134,7 +174,7 @@ app.post('/api/quiz/criar', async (req, res) => {
 app.get('/api/quiz/listar', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, nome, data_criacao FROM quizzes ORDER BY data_criacao DESC'
+      'SELECT id, nome, data_criacao, musica_url, cor_fundo FROM quizzes ORDER BY data_criacao DESC'
     );
     res.json({ sucesso: true, quizzes: result.rows });
   } catch (err) {
@@ -173,18 +213,18 @@ app.get('/api/quiz/carregar/:id', async (req, res) => {
 
 // Salvar quiz completo
 app.post('/api/quiz/salvar', upload.single('logo'), async (req, res) => {
-  const { quiz_id, nome, cor_fundo, perguntas } = req.body;
+  const { quiz_id, nome, cor_fundo, musica_url, perguntas } = req.body;
   const logoBase64 = req.file ? `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}` : null;
   
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     
-    let updateQuery = 'UPDATE quizzes SET nome = $1, cor_fundo = $2';
-    let params = [nome, cor_fundo];
+    let updateQuery = 'UPDATE quizzes SET nome = $1, cor_fundo = $2, musica_url = $3';
+    let params = [nome, cor_fundo, musica_url || null];
     
     if (logoBase64) {
-      updateQuery += ', logo_base64 = $3, logo_tipo = $4';
+      updateQuery += ', logo_base64 = $4, logo_tipo = $5';
       params.push(logoBase64, req.file.mimetype);
     }
     
@@ -199,7 +239,7 @@ app.post('/api/quiz/salvar', upload.single('logo'), async (req, res) => {
     for (const p of perguntasData) {
       await client.query(`
         INSERT INTO perguntas (
-          quiz_id, texto, imagem_base64, imagem_tipo,
+          quiz_id, texto, imagem_url,
           opcao_a_texto, opcao_a_botao,
           opcao_b_texto, opcao_b_botao,
           opcao_c_texto, opcao_c_botao,
@@ -207,7 +247,7 @@ app.post('/api/quiz/salvar', upload.single('logo'), async (req, res) => {
           correta, tempo
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       `, [
-        quiz_id, p.texto, p.imagem_base64 || null, p.imagem_tipo || null,
+        quiz_id, p.texto, p.imagem_url || null,
         p.opcao_a_texto, p.opcao_a_botao,
         p.opcao_b_texto, p.opcao_b_botao,
         p.opcao_c_texto, p.opcao_c_botao,
@@ -251,10 +291,18 @@ app.post('/api/sala/criar', async (req, res) => {
       return res.json({ sucesso: false, erro: 'Quiz sem perguntas' });
     }
     
+    // Buscar música do quiz
+    const quizResult = await pool.query(
+      'SELECT musica_url FROM quizzes WHERE id = $1',
+      [quiz_id]
+    );
+    const musicaUrl = quizResult.rows[0]?.musica_url || null;
+    
     salas[codigo] = {
       codigo: codigo,
       quiz_id: quiz_id,
       quizNome: quizNome,
+      musica_url: musicaUrl,
       jogadores: {},
       perguntas: result.rows,
       perguntaAtual: -1,
@@ -264,7 +312,7 @@ app.post('/api/sala/criar', async (req, res) => {
       respostasPerguntaAtual: {}
     };
     
-    res.json({ sucesso: true, codigo: codigo });
+    res.json({ sucesso: true, codigo: codigo, musica_url: musicaUrl });
   } catch (err) {
     res.json({ sucesso: false, erro: err.message });
   }
@@ -288,6 +336,16 @@ app.get('/api/sala/config/:codigo', async (req, res) => {
     } catch (err) {
       res.json({ sucesso: false, erro: err.message });
     }
+  } else {
+    res.json({ sucesso: false });
+  }
+});
+
+// Buscar música da sala
+app.get('/api/sala/musica/:codigo', async (req, res) => {
+  const sala = salas[req.params.codigo];
+  if (sala && sala.musica_url) {
+    res.json({ sucesso: true, musica_url: sala.musica_url });
   } else {
     res.json({ sucesso: false });
   }
@@ -355,9 +413,13 @@ io.on('connection', (socket) => {
     if (salas[codigo]) {
       socket.join(`host_${codigo}`);
       socket.emit('host-entrada-aceita', { sucesso: true });
-      // Enviar lista de jogadores atual
       socket.emit('atualizar-jogadores', Object.values(salas[codigo].jogadores));
       enviarRanking(codigo);
+      
+      // Enviar música se houver
+      if (salas[codigo].musica_url) {
+        socket.emit('musica-url', salas[codigo].musica_url);
+      }
     }
   });
 
@@ -367,6 +429,7 @@ io.on('connection', (socket) => {
     if (sala && sala.jogoAtivo) {
       sala.pausado = true;
       io.to(codigo).emit('jogo-pausado');
+      io.to(`host_${codigo}`).emit('jogo-pausado');
     }
   });
 
@@ -376,7 +439,7 @@ io.on('connection', (socket) => {
     if (sala && sala.jogoAtivo) {
       sala.pausado = false;
       io.to(codigo).emit('jogo-retomado');
-      // Continuar o timer
+      io.to(`host_${codigo}`).emit('jogo-retomado');
     }
   });
 
@@ -461,7 +524,7 @@ io.on('connection', (socket) => {
     const dadosJogador = {
       pergunta: {
         texto: pergunta.texto,
-        imagem_base64: pergunta.imagem_base64,
+        imagem_url: pergunta.imagem_url,
         tempo: pergunta.tempo
       },
       botoes: {
@@ -475,7 +538,7 @@ io.on('connection', (socket) => {
     const dadosHost = {
       pergunta: {
         texto: pergunta.texto,
-        imagem_base64: pergunta.imagem_base64,
+        imagem_url: pergunta.imagem_url,
         tempo: pergunta.tempo,
         opcoes: {
           A: pergunta.opcao_a_texto,
@@ -489,7 +552,7 @@ io.on('connection', (socket) => {
     io.to(codigo).emit('nova-pergunta-jogador', dadosJogador);
     io.to(`host_${codigo}`).emit('nova-pergunta-host', dadosHost);
     
-    // Timer automático para avançar (se não pausado)
+    // Timer automático para avançar
     let tempoRestante = pergunta.tempo;
     const timerInterval = setInterval(() => {
       if (!sala.jogoAtivo) {
@@ -507,6 +570,8 @@ io.on('connection', (socket) => {
         }
       }
     }, 1000);
+    
+    sala.timerInterval = timerInterval;
   }
   
   function enviarRanking(codigo) {
@@ -525,6 +590,8 @@ io.on('connection', (socket) => {
     const sala = salas[codigo];
     if (!sala || !sala.jogoAtivo) return;
     
+    if (sala.timerInterval) clearInterval(sala.timerInterval);
+    
     const proximoIndice = sala.perguntaAtual + 1;
     
     if (proximoIndice < sala.perguntas.length) {
@@ -539,6 +606,8 @@ io.on('connection', (socket) => {
   async function finalizarJogo(codigo) {
     const sala = salas[codigo];
     if (!sala) return;
+    
+    if (sala.timerInterval) clearInterval(sala.timerInterval);
     
     const ranking = Object.values(sala.jogadores)
       .sort((a, b) => b.pontuacao - a.pontuacao);
@@ -590,6 +659,7 @@ server.listen(PORT, '0.0.0.0', () => {
   ╠═══════════════════════════════════════╣
   ║  Acesse: http://localhost:${PORT}      ║
   ║  Tela do Host: http://localhost:${PORT}/host ║
+  ║  Controle: http://localhost:${PORT}/game-control ║
   ║  Senha Mestra: ${SENHA_MESTRA}         ║
   ╚═══════════════════════════════════════╝
   `);

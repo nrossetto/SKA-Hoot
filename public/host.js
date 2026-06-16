@@ -26,7 +26,6 @@ function verificarSenha() {
 
 function logout() { location.reload(); }
 
-// ============ QUIZZES ============
 function carregarQuizzes() {
     fetch('/api/quiz/listar')
         .then(res => res.json())
@@ -117,39 +116,34 @@ function selecionarQuizJogar(id) {
     }
 }
 
-// ============ EXPORT QUIZ ============
+// ============ EXPORT (CORRIGIDO) ============
 function exportarQuiz(id) {
     fetch(`/api/quiz/export/${id}`)
         .then(response => {
             if (!response.ok) {
-                return response.json().then(data => { throw new Error(data.erro || 'Erro ao exportar'); });
+                return response.json().then(data => { 
+                    throw new Error(data.erro || 'Erro ao exportar'); 
+                });
             }
             return response.blob();
         })
         .then(blob => {
-            // Criar link para download
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            // O nome do arquivo já vem do servidor, mas podemos extrair do Content-Disposition
-            const contentDisposition = response.headers.get('Content-Disposition');
-            let filename = 'quiz_exportado.json';
-            if (contentDisposition) {
-                const match = contentDisposition.match(/filename="(.+)"/);
-                if (match) filename = match[1];
-            }
-            a.download = filename;
+            a.download = 'quiz_exportado.json';
             document.body.appendChild(a);
             a.click();
             a.remove();
             window.URL.revokeObjectURL(url);
+            alert('✅ Quiz exportado com sucesso!');
         })
         .catch(err => {
-            alert('Erro ao exportar: ' + err.message);
+            alert('❌ Erro ao exportar: ' + err.message);
         });
 }
 
-// ============ IMPORT QUIZ ============
+// ============ IMPORT ============
 function importarQuiz() {
     const fileInput = document.getElementById('fileImport');
     const file = fileInput.files[0];
@@ -163,13 +157,11 @@ function importarQuiz() {
         try {
             const data = JSON.parse(e.target.result);
             
-            // Validar estrutura básica
             if (!data.nome || !data.perguntas || !Array.isArray(data.perguntas) || data.perguntas.length === 0) {
                 alert('Arquivo inválido: faltando "nome" ou "perguntas"');
                 return;
             }
             
-            // Validar cada pergunta
             for (const p of data.perguntas) {
                 if (!p.texto) {
                     alert('Uma pergunta está sem texto!');
@@ -177,7 +169,6 @@ function importarQuiz() {
                 }
             }
             
-            // Enviar para o servidor
             fetch('/api/quiz/import', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -441,7 +432,7 @@ function salvarConfigQuiz() {
     salvarQuiz();
 }
 
-// ============ CRIAR SALA ============
+// ============ SALA ============
 function criarSala() {
     const quizId = document.getElementById('quizJogar').value;
     if (!quizId) {

@@ -151,6 +151,7 @@
             <div class="sem-jogo">
                 <h2>🎯 Aguardando o jogo começar...</h2>
                 <p>O apresentador verá a pergunta aqui quando o jogo iniciar.</p>
+                <p style="margin-top: 20px;">📌 Abra esta janela em um projetor ou segunda tela</p>
             </div>
         </div>
         
@@ -172,7 +173,7 @@
         const codigoSala = urlParams.get('codigo');
         
         if (!codigoSala) {
-            alert('Código da sala não informado!');
+            alert('❌ Código da sala não informado!');
             window.location.href = '/host';
         }
         
@@ -182,12 +183,12 @@
         let timerInterval;
         
         socket.on('connect', () => {
-            console.log('Conectado');
+            console.log('✅ Conectado ao servidor');
             socket.emit('host-conectar', codigoSala);
         });
         
         socket.on('host-entrada-aceita', () => {
-            console.log('Conectado à sala como apresentador');
+            console.log('✅ Conectado à sala como apresentador');
         });
         
         socket.on('nova-pergunta-host', (data) => {
@@ -251,6 +252,10 @@
                 </div>
             `;
             clearInterval(timerInterval);
+        });
+        
+        socket.on('erro', (msg) => {
+            alert('Erro: ' + msg);
         });
     </script>
 </body>

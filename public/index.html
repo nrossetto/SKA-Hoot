@@ -8,24 +8,20 @@
 </head>
 <body class="player-body" id="playerBody">
     <div class="container player-container">
-        <!-- Tela de Entrada -->
         <div id="telaEntrada" class="tela-entrada">
             <div class="logo-area" id="logoArea">
                 <h1>🎮 SKA-HOOT</h1>
             </div>
             <div class="entrada-sala">
-                <input type="text" id="codigoSala" placeholder="Código da sala" maxlength="4" class="input-grande input-numerico">
+                <input type="text" id="codigoSala" placeholder="Código" maxlength="4" class="input-grande input-numerico">
                 <input type="text" id="nomeJogador" placeholder="Seu nome" maxlength="20" class="input-grande">
-                <button id="btnEntrar" class="btn-principal">ENTRAR NA SALA</button>
+                <button id="btnEntrar" class="btn-principal">ENTRAR</button>
             </div>
         </div>
         
-        <!-- Tela de Sala de Espera -->
         <div id="telaAguardando" style="display:none;">
             <div class="sala-espera">
-                <div class="quiz-info">
-                    <h2 id="quizNome"></h2>
-                </div>
+                <div class="quiz-info"><h2 id="quizNome"></h2></div>
                 <div class="seu-card">
                     <div id="seuNome" class="seu-nome"></div>
                     <div class="status">Aguardando o jogo começar...</div>
@@ -37,7 +33,6 @@
             </div>
         </div>
         
-        <!-- Tela de Jogo -->
         <div id="telaJogo" style="display:none;">
             <div class="game-header">
                 <div class="pontuacao-header">⭐ <span id="pontuacaoAtual">0</span></div>
@@ -73,7 +68,6 @@
             </div>
         </div>
         
-        <!-- Tela de Feedback -->
         <div id="telaFeedback" style="display:none;" class="feedback-overlay">
             <div class="feedback-content">
                 <div id="feedbackIcon" class="feedback-icon"></div>
@@ -82,7 +76,6 @@
             </div>
         </div>
         
-        <!-- Tela de Pódio -->
         <div id="telaPodio" style="display:none;" class="podio-overlay">
             <div class="podio-container">
                 <div id="podioContent" class="podio-content"></div>
@@ -90,7 +83,6 @@
             </div>
         </div>
         
-        <!-- Modal Ranking -->
         <div id="telaRanking" style="display:none;" class="modal">
             <div class="modal-content">
                 <span class="close" onclick="fecharRanking()">&times;</span>

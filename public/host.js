@@ -4,10 +4,8 @@ let quizAtual = null;
 let perguntasAtuais = [];
 let quizIdAtual = null;
 
-// ============ LOGIN ============
 function verificarSenha() {
     const senha = document.getElementById('senha').value;
-    
     fetch('/api/verificar-senha', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -27,11 +25,8 @@ function verificarSenha() {
     });
 }
 
-function logout() {
-    location.reload();
-}
+function logout() { location.reload(); }
 
-// ============ QUIZZES ============
 function carregarQuizzes() {
     fetch('/api/quiz/listar')
         .then(res => res.json())
@@ -39,12 +34,13 @@ function carregarQuizzes() {
             if (data.sucesso) {
                 const grid = document.getElementById('quizzesGrid');
                 if (data.quizzes.length === 0) {
-                    grid.innerHTML = '<div class="empty-state">Nenhum quiz criado ainda. Clique em "Criar Novo Quiz"</div>';
+                    grid.innerHTML = '<div class="empty-state">Nenhum quiz criado ainda.</div>';
                 } else {
                     grid.innerHTML = data.quizzes.map(q => `
                         <div class="quiz-card">
                             <h3>${escapeHtml(q.nome)}</h3>
                             <p>Criado em: ${new Date(q.data_criacao).toLocaleDateString()}</p>
+                            ${q.musica_url ? '<p>🎵 Com música</p>' : ''}
                             <div class="quiz-card-buttons">
                                 <button onclick="editarQuiz(${q.id})" class="btn-pequeno">✏️ Editar</button>
                                 <button onclick="deletarQuiz(${q.id})" class="btn-pequeno-danger">🗑️ Deletar</button>
@@ -74,7 +70,6 @@ function carregarSelectQuizzes() {
 function criarNovoQuiz() {
     const nome = prompt('Digite o nome do novo quiz:');
     if (!nome) return;
-    
     fetch('/api/quiz/criar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -83,7 +78,7 @@ function criarNovoQuiz() {
     .then(res => res.json())
     .then(data => {
         if (data.sucesso) {
-            alert('Quiz criado com sucesso!');
+            alert('Quiz criado!');
             carregarQuizzes();
             carregarSelectQuizzes();
             document.getElementById('quizSelecionado').value = data.id;
@@ -102,26 +97,46 @@ function editarQuiz(id) {
 }
 
 function deletarQuiz(id) {
-    if (confirm('Tem certeza que deseja deletar este quiz? Todas as perguntas serão perdidas!')) {
+    if (confirm('Deletar este quiz?')) {
         fetch(`/api/quiz/deletar/${id}`, { method: 'DELETE' })
-            .then(res => res.json())
-            .then(data => {
-                if (data.sucesso) {
-                    alert('Quiz deletado!');
-                    carregarQuizzes();
-                    carregarSelectQuizzes();
-                } else {
-                    alert('Erro ao deletar');
-                }
-            });
+            .then(() => { carregarQuizzes(); carregarSelectQuizzes(); });
     }
+}
+
+// ============ UPLOAD DE MÚSICA ============
+function uploadMusica() {
+    const fileInput = document.getElementById('uploadMusica');
+    const file = fileInput.files[0];
+    if (!file) {
+        alert('Selecione um arquivo MP3');
+        return;
+    }
+    const formData = new FormData();
+    formData.append('musica', file);
+    fetch('/api/upload/musica', {
+        method: 'POST',
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.sucesso) {
+            document.getElementById('musicaUrl').value = data.url;
+            document.getElementById('musicaPreview').innerHTML = `
+                <audio controls style="width: 100%;">
+                    <source src="${data.url}" type="audio/mpeg">
+                </audio>
+                <p>✅ Música carregada!</p>
+            `;
+        } else {
+            alert('Erro: ' + data.erro);
+        }
+    });
 }
 
 // ============ EDITOR DE PERGUNTAS ============
 function carregarQuiz(id) {
     if (!id) return;
     quizIdAtual = id;
-    
     fetch(`/api/quiz/carregar/${id}`)
         .then(res => res.json())
         .then(data => {
@@ -130,6 +145,12 @@ function carregarQuiz(id) {
                 document.getElementById('corFundo').value = data.quiz.cor_fundo || '#667eea';
                 if (data.quiz.musica_url) {
                     document.getElementById('musicaUrl').value = data.quiz.musica_url;
+                    document.getElementById('musicaPreview').innerHTML = `
+                        <audio controls style="width: 100%;">
+                            <source src="${data.quiz.musica_url}" type="audio/mpeg">
+                        </audio>
+                        <p>✅ Música configurada</p>
+                    `;
                 }
                 perguntasAtuais = data.perguntas || [];
                 renderizarPerguntas();
@@ -140,7 +161,7 @@ function carregarQuiz(id) {
 function renderizarPerguntas() {
     const container = document.getElementById('editorPerguntas');
     if (perguntasAtuais.length === 0) {
-        container.innerHTML = '<div class="empty-state">Nenhuma pergunta. Clique em "Adicionar Pergunta"</div>';
+        container.innerHTML = '<div class="empty-state">Nenhuma pergunta.</div>';
         return;
     }
     
@@ -152,7 +173,7 @@ function renderizarPerguntas() {
             </div>
             
             <div class="campo-imagem">
-                <label>📸 Imagem da pergunta:</label>
+                <label>📸 Imagem:</label>
                 <input type="file" class="upload-imagem-edit" data-idx="${idx}" accept="image/*">
                 <div class="preview-imagem" id="preview-${idx}">
                     ${p.imagem_url ? `<img src="${p.imagem_url}" style="max-width: 100px;">` : ''}
@@ -164,22 +185,26 @@ function renderizarPerguntas() {
             
             <div class="opcao-item">
                 <span class="opcao-simbolo" style="color: #e74c3c;">★</span>
-                <input type="text" placeholder="Opção A (ex: Brasília)" value="${escapeHtml(p.opcao_a || '')}" class="resposta-texto" data-opcao="A" data-idx="${idx}">
+                <input type="text" placeholder="Texto completo (ex: Brasília)" value="${escapeHtml(p.opcao_a || '')}" class="resposta-texto" data-opcao="A" data-idx="${idx}">
+                <input type="text" placeholder="Texto curto (ex: BRA)" value="${escapeHtml(p.opcao_a_botao || '')}" class="botao-texto" data-opcao="A" data-idx="${idx}">
             </div>
             
             <div class="opcao-item">
                 <span class="opcao-simbolo" style="color: #2ecc71;">▲</span>
-                <input type="text" placeholder="Opção B (ex: São Paulo)" value="${escapeHtml(p.opcao_b || '')}" class="resposta-texto" data-opcao="B" data-idx="${idx}">
+                <input type="text" placeholder="Texto completo (ex: São Paulo)" value="${escapeHtml(p.opcao_b || '')}" class="resposta-texto" data-opcao="B" data-idx="${idx}">
+                <input type="text" placeholder="Texto curto (ex: SP)" value="${escapeHtml(p.opcao_b_botao || '')}" class="botao-texto" data-opcao="B" data-idx="${idx}">
             </div>
             
             <div class="opcao-item">
                 <span class="opcao-simbolo" style="color: #3498db;">●</span>
-                <input type="text" placeholder="Opção C (ex: Rio de Janeiro)" value="${escapeHtml(p.opcao_c || '')}" class="resposta-texto" data-opcao="C" data-idx="${idx}">
+                <input type="text" placeholder="Texto completo (ex: Rio de Janeiro)" value="${escapeHtml(p.opcao_c || '')}" class="resposta-texto" data-opcao="C" data-idx="${idx}">
+                <input type="text" placeholder="Texto curto (ex: RIO)" value="${escapeHtml(p.opcao_c_botao || '')}" class="botao-texto" data-opcao="C" data-idx="${idx}">
             </div>
             
             <div class="opcao-item">
                 <span class="opcao-simbolo" style="color: #f1c40f;">■</span>
-                <input type="text" placeholder="Opção D (ex: Salvador)" value="${escapeHtml(p.opcao_d || '')}" class="resposta-texto" data-opcao="D" data-idx="${idx}">
+                <input type="text" placeholder="Texto completo (ex: Salvador)" value="${escapeHtml(p.opcao_d || '')}" class="resposta-texto" data-opcao="D" data-idx="${idx}">
+                <input type="text" placeholder="Texto curto (ex: SA)" value="${escapeHtml(p.opcao_d_botao || '')}" class="botao-texto" data-opcao="D" data-idx="${idx}">
             </div>
             
             <div class="pergunta-footer">
@@ -198,6 +223,7 @@ function renderizarPerguntas() {
         </div>
     `).join('');
     
+    // Event listeners
     document.querySelectorAll('.upload-imagem-edit').forEach(input => {
         input.addEventListener('change', async (e) => {
             const idx = parseInt(e.target.dataset.idx);
@@ -234,6 +260,14 @@ function renderizarPerguntas() {
         });
     });
     
+    document.querySelectorAll('.botao-texto').forEach(input => {
+        input.addEventListener('change', (e) => {
+            const idx = parseInt(e.target.dataset.idx);
+            const opcao = e.target.dataset.opcao.toLowerCase();
+            perguntasAtuais[idx][`opcao_${opcao}_botao`] = e.target.value;
+        });
+    });
+    
     document.querySelectorAll('.correta-select').forEach(select => {
         select.addEventListener('change', (e) => {
             const idx = parseInt(e.target.dataset.idx);
@@ -254,9 +288,13 @@ function adicionarPergunta() {
         texto: '',
         imagem_url: null,
         opcao_a: '',
+        opcao_a_botao: '',
         opcao_b: '',
+        opcao_b_botao: '',
         opcao_c: '',
+        opcao_c_botao: '',
         opcao_d: '',
+        opcao_d_botao: '',
         correta: 'A',
         tempo: 15
     });
@@ -325,29 +363,19 @@ function criarSala() {
         alert('Selecione um quiz');
         return;
     }
-    
     const quizNome = document.getElementById('quizJogar').options[document.getElementById('quizJogar').selectedIndex]?.text;
-    
     fetch('/api/sala/criar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            quiz_id: quizId, 
-            quizNome: quizNome
-        })
+        body: JSON.stringify({ quiz_id: quizId, quizNome: quizNome })
     })
     .then(res => res.json())
     .then(data => {
         if (data.sucesso) {
             codigoSalaAtual = data.codigo;
-            
             document.getElementById('salaInfo').style.display = 'block';
             document.getElementById('codigoSalaDisplay').innerHTML = `📱 CÓDIGO: ${codigoSalaAtual}`;
-            
-            // Habilitar botão iniciar
             document.getElementById('btnIniciarJogo').disabled = false;
-            
-            // Conectar socket para receber atualizações
             conectarHost();
         } else {
             alert('Erro: ' + data.erro);
@@ -360,17 +388,12 @@ function abrirApresentador() {
         alert('Crie uma sala primeiro!');
         return;
     }
-    
     window.open(`/apresentador?codigo=${codigoSalaAtual}`, '_blank');
 }
 
 function iniciarJogo() {
-    if (!codigoSalaAtual) {
-        alert('Crie uma sala primeiro!');
-        return;
-    }
-    
-    if (confirm('▶ Iniciar o jogo agora?')) {
+    if (!codigoSalaAtual) return;
+    if (confirm('Iniciar o jogo agora?')) {
         socket.emit('iniciar-jogo', codigoSalaAtual);
         document.getElementById('btnIniciarJogo').disabled = true;
         document.getElementById('btnProximaPergunta').disabled = false;
@@ -385,33 +408,23 @@ function proximaPergunta() {
 
 function conectarHost() {
     if (socket) socket.disconnect();
-    
     socket = io();
     
-    socket.on('host-entrada-aceita', () => {
-        console.log('✅ Conectado como host');
-    });
+    socket.on('host-entrada-aceita', () => console.log('Conectado'));
     
     socket.on('atualizar-jogadores', (jogadores) => {
         const lista = document.getElementById('listaJogadoresHost');
         document.getElementById('totalJogadores').innerText = jogadores.length;
-        if (lista) {
-            lista.innerHTML = jogadores.map(j => `
-                <div class="jogador-item-host" style="padding: 5px; border-bottom: 1px solid #555;">${j.emoji} ${j.nome} - ${j.pontuacao} pts</div>
-            `).join('');
-        }
+        lista.innerHTML = jogadores.map(j => 
+            `<div class="jogador-item-host">${j.emoji} ${j.nome} - ${j.pontuacao} pts</div>`
+        ).join('');
     });
     
     socket.on('atualizar-ranking', (ranking) => {
         const rankingDiv = document.getElementById('rankingHost');
-        if (rankingDiv) {
-            rankingDiv.innerHTML = ranking.slice(0, 10).map(r => `
-                <div class="ranking-item" style="padding: 5px; border-bottom: 1px solid #555; display: flex; justify-content: space-between;">
-                    <span>${r.posicao}º ${r.emoji} ${r.nome}</span>
-                    <strong>${r.pontuacao} pts</strong>
-                </div>
-            `).join('');
-        }
+        rankingDiv.innerHTML = ranking.slice(0, 10).map(r => 
+            `<div class="ranking-item">${r.posicao}º ${r.emoji} ${r.nome} - ${r.pontuacao} pts</div>`
+        ).join('');
     });
     
     socket.on('fim-jogo', (data) => {
@@ -419,68 +432,40 @@ function conectarHost() {
         document.getElementById('btnIniciarJogo').disabled = false;
         document.getElementById('btnProximaPergunta').disabled = true;
     });
-    
-    socket.on('erro', (msg) => {
-        alert('Erro: ' + msg);
-    });
 }
 
-// ============ HISTÓRICO ============
 function carregarHistorico() {
     fetch('/api/historico')
         .then(res => res.json())
         .then(data => {
             if (data.sucesso) {
                 const lista = document.getElementById('listaHistorico');
-                if (data.historico.length === 0) {
-                    lista.innerHTML = '<div class="empty-state">Nenhum histórico encontrado</div>';
-                } else {
-                    lista.innerHTML = data.historico.map(h => `
-                        <div class="historico-card">
-                            <strong>📅 ${new Date(h.data_hora).toLocaleString()}</strong><br>
-                            🎯 Quiz ID: ${h.quiz_id}<br>
-                            🔢 Código da sala: ${h.codigo}
-                        </div>
-                    `).join('');
-                }
+                lista.innerHTML = data.historico.map(h => `
+                    <div class="historico-card">
+                        <strong>📅 ${new Date(h.data_hora).toLocaleString()}</strong><br>
+                        🎯 Quiz ID: ${h.quiz_id}<br>
+                        🔢 Código: ${h.codigo}
+                    </div>
+                `).join('');
             }
         });
 }
 
 function deletarHistorico() {
-    if (confirm('⚠️ Deletar todo o histórico? Essa ação não pode ser desfeita!')) {
+    if (confirm('Deletar todo o histórico?')) {
         fetch('/api/historico/deletar', { method: 'DELETE' })
-            .then(() => {
-                alert('Histórico deletado!');
-                carregarHistorico();
-            });
+            .then(() => carregarHistorico());
     }
 }
 
-// ============ MÚSICA ============
-function testarMusica() {
-    const url = document.getElementById('musicaUrl').value;
-    if (url) {
-        const audio = new Audio(url);
-        audio.play().catch(e => alert('Não foi possível tocar. Verifique a URL.'));
-    } else {
-        alert('Digite uma URL de música MP3');
-    }
-}
-
-// ============ UTILITÁRIOS ============
 function mostrarTab(tab) {
     document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    
     const tabs = { quizzes: 0, editar: 1, jogar: 2, config: 3, historico: 4 };
     const tabName = tab.charAt(0).toUpperCase() + tab.slice(1);
     document.getElementById(`tab${tabName}`).style.display = 'block';
     document.querySelectorAll('.tab-btn')[tabs[tab]].classList.add('active');
-    
-    if (tab === 'historico') {
-        carregarHistorico();
-    }
+    if (tab === 'historico') carregarHistorico();
 }
 
 function escapeHtml(text) {

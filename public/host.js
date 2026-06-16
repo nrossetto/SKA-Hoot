@@ -44,6 +44,7 @@ function carregarQuizzes() {
                             <div class="quiz-card-buttons">
                                 <button onclick="editarQuiz(${q.id})" class="btn-pequeno">✏️ Editar</button>
                                 <button onclick="deletarQuiz(${q.id})" class="btn-pequeno-danger">🗑️ Deletar</button>
+                                <button onclick="exportarQuiz(${q.id})" class="btn-export">📥 Exportar</button>
                             </div>
                         </div>
                     `).join('');
@@ -114,6 +115,93 @@ function selecionarQuizJogar(id) {
                 }
             });
     }
+}
+
+// ============ EXPORT QUIZ ============
+function exportarQuiz(id) {
+    fetch(`/api/quiz/export/${id}`)
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(data => { throw new Error(data.erro || 'Erro ao exportar'); });
+            }
+            return response.blob();
+        })
+        .then(blob => {
+            // Criar link para download
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            // O nome do arquivo já vem do servidor, mas podemos extrair do Content-Disposition
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = 'quiz_exportado.json';
+            if (contentDisposition) {
+                const match = contentDisposition.match(/filename="(.+)"/);
+                if (match) filename = match[1];
+            }
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+        })
+        .catch(err => {
+            alert('Erro ao exportar: ' + err.message);
+        });
+}
+
+// ============ IMPORT QUIZ ============
+function importarQuiz() {
+    const fileInput = document.getElementById('fileImport');
+    const file = fileInput.files[0];
+    if (!file) {
+        alert('Selecione um arquivo .json para importar');
+        return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = JSON.parse(e.target.result);
+            
+            // Validar estrutura básica
+            if (!data.nome || !data.perguntas || !Array.isArray(data.perguntas) || data.perguntas.length === 0) {
+                alert('Arquivo inválido: faltando "nome" ou "perguntas"');
+                return;
+            }
+            
+            // Validar cada pergunta
+            for (const p of data.perguntas) {
+                if (!p.texto) {
+                    alert('Uma pergunta está sem texto!');
+                    return;
+                }
+            }
+            
+            // Enviar para o servidor
+            fetch('/api/quiz/import', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(res => res.json())
+            .then(result => {
+                if (result.sucesso) {
+                    alert(result.mensagem || 'Quiz importado com sucesso!');
+                    fileInput.value = '';
+                    carregarQuizzes();
+                    carregarSelectQuizzes();
+                } else {
+                    alert('Erro ao importar: ' + result.erro);
+                }
+            })
+            .catch(err => {
+                alert('Erro ao enviar arquivo: ' + err.message);
+            });
+        } catch (err) {
+            alert('Erro ao ler arquivo: ' + err.message + '\nCertifique-se de que é um JSON válido.');
+        }
+    };
+    reader.readAsText(file);
 }
 
 // ============ UPLOAD DE MÚSICA ============
@@ -382,7 +470,6 @@ function copiarCodigo() {
     navigator.clipboard.writeText(codigoSalaAtual).then(() => {
         alert('✅ Código copiado!');
     }).catch(() => {
-        // Fallback
         const input = document.createElement('input');
         input.value = codigoSalaAtual;
         document.body.appendChild(input);

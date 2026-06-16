@@ -57,6 +57,7 @@ async function initDatabase() {
     await client.query(`DROP TABLE IF EXISTS perguntas`);
     await client.query(`DROP TABLE IF EXISTS quizzes`);
     
+    // Tabela quizzes com campo para música (URL do arquivo)
     await client.query(`
       CREATE TABLE quizzes (
         id SERIAL PRIMARY KEY,
@@ -67,6 +68,7 @@ async function initDatabase() {
       )
     `);
     
+    // Tabela perguntas com opcao_a_botao, opcao_b_botao, etc.
     await client.query(`
       CREATE TABLE perguntas (
         id SERIAL PRIMARY KEY,
@@ -74,9 +76,13 @@ async function initDatabase() {
         texto TEXT,
         imagem_url TEXT,
         opcao_a TEXT,
+        opcao_a_botao TEXT,
         opcao_b TEXT,
+        opcao_b_botao TEXT,
         opcao_c TEXT,
+        opcao_c_botao TEXT,
         opcao_d TEXT,
+        opcao_d_botao TEXT,
         correta CHAR(1),
         tempo INTEGER DEFAULT 15
       )
@@ -120,11 +126,13 @@ app.post('/api/verificar-senha', (req, res) => {
   res.json({ sucesso: req.body.senha === SENHA_MESTRA });
 });
 
+// Upload de música (MP3)
 app.post('/api/upload/musica', upload.single('musica'), (req, res) => {
   if (!req.file) return res.json({ sucesso: false, erro: 'Nenhum arquivo' });
   res.json({ sucesso: true, url: `/uploads/${req.file.filename}` });
 });
 
+// Upload de imagem
 app.post('/api/upload/imagem', upload.single('imagem'), (req, res) => {
   if (!req.file) return res.json({ sucesso: false, erro: 'Nenhum arquivo' });
   res.json({ sucesso: true, url: `/uploads/${req.file.filename}` });
@@ -141,7 +149,7 @@ app.post('/api/quiz/criar', async (req, res) => {
 
 app.get('/api/quiz/listar', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, nome, data_criacao FROM quizzes ORDER BY data_criacao DESC');
+    const result = await pool.query('SELECT id, nome, data_criacao, musica_url, cor_fundo FROM quizzes ORDER BY data_criacao DESC');
     res.json({ sucesso: true, quizzes: result.rows });
   } catch (err) {
     res.json({ sucesso: false, erro: err.message });
@@ -175,14 +183,26 @@ app.post('/api/quiz/salvar', async (req, res) => {
       await client.query(`
         INSERT INTO perguntas (
           quiz_id, texto, imagem_url,
-          opcao_a, opcao_b, opcao_c, opcao_d,
+          opcao_a, opcao_a_botao,
+          opcao_b, opcao_b_botao,
+          opcao_c, opcao_c_botao,
+          opcao_d, opcao_d_botao,
           correta, tempo
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       `, [
-        quiz_id, p.texto || '', p.imagem_url || null,
-        p.opcao_a || '', p.opcao_b || '',
-        p.opcao_c || '', p.opcao_d || '',
-        p.correta || 'A', p.tempo || 15
+        quiz_id, 
+        p.texto || '', 
+        p.imagem_url || null,
+        p.opcao_a || '', 
+        p.opcao_a_botao || '',
+        p.opcao_b || '', 
+        p.opcao_b_botao || '',
+        p.opcao_c || '', 
+        p.opcao_c_botao || '',
+        p.opcao_d || '', 
+        p.opcao_d_botao || '',
+        p.correta || 'A', 
+        p.tempo || 15
       ]);
     }
     
@@ -369,6 +389,7 @@ io.on('connection', (socket) => {
     sala.respostasPerguntaAtual = {};
     sala.perguntaAtual = indice;
     
+    // Para o apresentador (host) - mostra as opções completas e os textos curtos
     const dadosHost = {
       pergunta: {
         texto: pergunta.texto,
@@ -379,10 +400,17 @@ io.on('connection', (socket) => {
           B: pergunta.opcao_b,
           C: pergunta.opcao_c,
           D: pergunta.opcao_d
+        },
+        botoes: {
+          A: pergunta.opcao_a_botao || 'A',
+          B: pergunta.opcao_b_botao || 'B',
+          C: pergunta.opcao_c_botao || 'C',
+          D: pergunta.opcao_d_botao || 'D'
         }
       }
     };
     
+    // Para o jogador - mostra apenas os textos curtos nos botões
     const dadosJogador = {
       pergunta: {
         texto: pergunta.texto,
@@ -390,10 +418,10 @@ io.on('connection', (socket) => {
         tempo: pergunta.tempo
       },
       botoes: {
-        A: 'A',
-        B: 'B',
-        C: 'C',
-        D: 'D'
+        A: pergunta.opcao_a_botao || 'A',
+        B: pergunta.opcao_b_botao || 'B',
+        C: pergunta.opcao_c_botao || 'C',
+        D: pergunta.opcao_d_botao || 'D'
       }
     };
     
@@ -457,9 +485,7 @@ io.on('connection', (socket) => {
   });
 });
 
-// ============ ROTAS DE ARQUIVOS (A ORDEM IMPORTA!) ============
-
-// Rotas específicas - SEMPRE antes do curinga
+// ============ ROTAS DE ARQUIVOS ============
 app.get('/host', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'host.html'));
 });
@@ -468,29 +494,18 @@ app.get('/apresentador', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'apresentador.html'));
 });
 
-app.get('/game-control', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'game-control.html'));
-});
-
-app.get('/teste.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'teste.html'));
-});
-
-// Rota curinga - sempre por último!
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Iniciar servidor
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`
   ╔═══════════════════════════════════════╗
-  ║     🎮 SKA-HOOT 2.0 FINAL! 🎮         ║
+  ║     🎮 SKA-HOOT FINAL! 🎮             ║
   ╠═══════════════════════════════════════╣
   ║  Acesse: http://localhost:${PORT}      ║
-  ║  Tela do Host: http://localhost:${PORT}/host ║
-  ║  Apresentador: http://localhost:${PORT}/apresentador ║
-  ║  Senha Mestra: ${SENHA_MESTRA}         ║
+  ║  Host: http://localhost:${PORT}/host   ║
+  ║  Senha: ${SENHA_MESTRA}                ║
   ╚═══════════════════════════════════════╝
   `);
 });

@@ -198,7 +198,6 @@ function renderizarPerguntas() {
         </div>
     `).join('');
     
-    // Upload de imagens no editor
     document.querySelectorAll('.upload-imagem-edit').forEach(input => {
         input.addEventListener('change', async (e) => {
             const idx = parseInt(e.target.dataset.idx);
@@ -206,7 +205,6 @@ function renderizarPerguntas() {
             if (file) {
                 const formData = new FormData();
                 formData.append('imagem', file);
-                
                 const response = await fetch('/api/upload/imagem', {
                     method: 'POST',
                     body: formData
@@ -216,13 +214,11 @@ function renderizarPerguntas() {
                     perguntasAtuais[idx].imagem_url = data.url;
                     document.getElementById(`preview-${idx}`).innerHTML = 
                         `<img src="${data.url}" style="max-width: 100px;">`;
-                    document.querySelector(`.imagem-url[data-idx="${idx}"]`).value = data.url;
                 }
             }
         });
     });
     
-    // Event listeners para campos de texto
     document.querySelectorAll('.pergunta-texto').forEach(input => {
         input.addEventListener('change', (e) => {
             const idx = parseInt(e.target.dataset.idx);
@@ -348,6 +344,9 @@ function criarSala() {
             document.getElementById('salaInfo').style.display = 'block';
             document.getElementById('codigoSalaDisplay').innerHTML = `📱 CÓDIGO: ${codigoSalaAtual}`;
             
+            // Habilitar botão iniciar
+            document.getElementById('btnIniciarJogo').disabled = false;
+            
             // Conectar socket para receber atualizações
             conectarHost();
         } else {
@@ -365,6 +364,25 @@ function abrirApresentador() {
     window.open(`/apresentador?codigo=${codigoSalaAtual}`, '_blank');
 }
 
+function iniciarJogo() {
+    if (!codigoSalaAtual) {
+        alert('Crie uma sala primeiro!');
+        return;
+    }
+    
+    if (confirm('▶ Iniciar o jogo agora?')) {
+        socket.emit('iniciar-jogo', codigoSalaAtual);
+        document.getElementById('btnIniciarJogo').disabled = true;
+        document.getElementById('btnProximaPergunta').disabled = false;
+    }
+}
+
+function proximaPergunta() {
+    if (!codigoSalaAtual) return;
+    socket.emit('proxima-pergunta', codigoSalaAtual);
+    document.getElementById('btnProximaPergunta').disabled = true;
+}
+
 function conectarHost() {
     if (socket) socket.disconnect();
     
@@ -376,9 +394,10 @@ function conectarHost() {
     
     socket.on('atualizar-jogadores', (jogadores) => {
         const lista = document.getElementById('listaJogadoresHost');
+        document.getElementById('totalJogadores').innerText = jogadores.length;
         if (lista) {
             lista.innerHTML = jogadores.map(j => `
-                <div class="jogador-item-host">${j.emoji} ${j.nome} - ${j.pontuacao} pts</div>
+                <div class="jogador-item-host" style="padding: 5px; border-bottom: 1px solid #555;">${j.emoji} ${j.nome} - ${j.pontuacao} pts</div>
             `).join('');
         }
     });
@@ -387,13 +406,22 @@ function conectarHost() {
         const rankingDiv = document.getElementById('rankingHost');
         if (rankingDiv) {
             rankingDiv.innerHTML = ranking.slice(0, 10).map(r => `
-                <div class="ranking-item">${r.posicao}º ${r.emoji} ${r.nome} - ${r.pontuacao} pts</div>
+                <div class="ranking-item" style="padding: 5px; border-bottom: 1px solid #555; display: flex; justify-content: space-between;">
+                    <span>${r.posicao}º ${r.emoji} ${r.nome}</span>
+                    <strong>${r.pontuacao} pts</strong>
+                </div>
             `).join('');
         }
     });
     
     socket.on('fim-jogo', (data) => {
         alert(`🏆 Jogo finalizado! Vencedor: ${data.ranking[0]?.nome}`);
+        document.getElementById('btnIniciarJogo').disabled = false;
+        document.getElementById('btnProximaPergunta').disabled = true;
+    });
+    
+    socket.on('erro', (msg) => {
+        alert('Erro: ' + msg);
     });
 }
 

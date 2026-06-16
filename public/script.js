@@ -68,6 +68,44 @@ function conectarServidor() {
         mostrarPergunta(data.pergunta, data.botoes);
     });
     
+    socket.on('mostrar-relatorio', (relatorio) => {
+        // Mostrar relatório na tela do jogador
+        const container = document.getElementById('pergunta-container');
+        if (container) {
+            container.innerHTML = `
+                <div style="background: white; border-radius: 15px; padding: 20px; text-align: center; color: #2c3e50;">
+                    <h3>📊 Resultado da Pergunta</h3>
+                    <div style="display: flex; gap: 20px; justify-content: center; margin: 15px 0;">
+                        <div style="background: #27ae60; color: white; padding: 15px; border-radius: 10px; min-width: 80px;">
+                            <div style="font-size: 2em;">✅</div>
+                            <div>${relatorio.pctAcertos}%</div>
+                        </div>
+                        <div style="background: #e74c3c; color: white; padding: 15px; border-radius: 10px; min-width: 80px;">
+                            <div style="font-size: 2em;">❌</div>
+                            <div>${relatorio.pctErros}%</div>
+                        </div>
+                    </div>
+                    <p>Resposta correta: <strong>${relatorio.respostaCorreta}</strong></p>
+                    <p style="color: #7f8c8d; font-size: 0.9em;">Aguardando próximo passo...</p>
+                </div>
+            `;
+        }
+        // Esconder botões de resposta
+        document.querySelector('.respostas-grid').style.display = 'none';
+    });
+    
+    socket.on('mostrar-ranking-parcial', () => {
+        // Restaurar interface para próxima pergunta
+        document.querySelector('.respostas-grid').style.display = 'grid';
+        document.getElementById('pergunta-container').innerHTML = `
+            <div class="tempo-restante">
+                <div class="tempo-bar" id="tempoBar"></div>
+            </div>
+            <div id="imagemPergunta" class="imagem-pergunta"></div>
+            <h2 id="textoPergunta" class="texto-pergunta"></h2>
+        `;
+    });
+    
     socket.on('feedback', (data) => {
         mostrarFeedback(data);
         if (data.correta) {
@@ -104,11 +142,13 @@ function mostrarPergunta(pergunta, botoes) {
         imgDiv.innerHTML = '';
     }
     
-    // Textos curtos nos botões!
     document.getElementById('botaoA').innerHTML = botoes.A || 'A';
     document.getElementById('botaoB').innerHTML = botoes.B || 'B';
     document.getElementById('botaoC').innerHTML = botoes.C || 'C';
     document.getElementById('botaoD').innerHTML = botoes.D || 'D';
+    
+    // Mostrar botões
+    document.querySelector('.respostas-grid').style.display = 'grid';
     
     if (timerInterval) clearInterval(timerInterval);
     const barra = document.getElementById('tempoBar');

@@ -45,7 +45,6 @@ function carregarQuizzes() {
                         <div class="quiz-card">
                             <h3>${escapeHtml(q.nome)}</h3>
                             <p>Criado em: ${new Date(q.data_criacao).toLocaleDateString()}</p>
-                            ${q.musica_url ? '<p>🎵 Com música</p>' : ''}
                             <div class="quiz-card-buttons">
                                 <button onclick="editarQuiz(${q.id})" class="btn-pequeno">✏️ Editar</button>
                                 <button onclick="deletarQuiz(${q.id})" class="btn-pequeno-danger">🗑️ Deletar</button>
@@ -118,69 +117,6 @@ function deletarQuiz(id) {
     }
 }
 
-// ============ UPLOAD ============
-function uploadMusica() {
-    const fileInput = document.getElementById('uploadMusica');
-    const file = fileInput.files[0];
-    
-    if (!file) {
-        alert('Selecione um arquivo MP3');
-        return;
-    }
-    
-    const formData = new FormData();
-    formData.append('musica', file);
-    
-    fetch('/api/upload/musica', {
-        method: 'POST',
-        body: formData
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.sucesso) {
-            document.getElementById('musicaUrl').value = data.url;
-            document.getElementById('musicaPreview').innerHTML = `
-                <audio controls style="width: 100%;">
-                    <source src="${data.url}" type="audio/mpeg">
-                </audio>
-                <p>✅ Música carregada!</p>
-            `;
-        } else {
-            alert('Erro ao fazer upload: ' + data.erro);
-        }
-    });
-}
-
-function uploadLogo() {
-    const fileInput = document.getElementById('uploadLogo');
-    const file = fileInput.files[0];
-    
-    if (!file) {
-        alert('Selecione uma imagem');
-        return;
-    }
-    
-    const formData = new FormData();
-    formData.append('imagem', file);
-    
-    fetch('/api/upload/imagem', {
-        method: 'POST',
-        body: formData
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.sucesso) {
-            document.getElementById('logoUrl').value = data.url;
-            document.getElementById('previewLogo').innerHTML = `
-                <img src="${data.url}" style="max-width: 150px; margin-top: 10px;">
-                <p>✅ Logo carregada!</p>
-            `;
-        } else {
-            alert('Erro ao fazer upload: ' + data.erro);
-        }
-    });
-}
-
 // ============ EDITOR DE PERGUNTAS ============
 function carregarQuiz(id) {
     if (!id) return;
@@ -194,12 +130,6 @@ function carregarQuiz(id) {
                 document.getElementById('corFundo').value = data.quiz.cor_fundo || '#667eea';
                 if (data.quiz.musica_url) {
                     document.getElementById('musicaUrl').value = data.quiz.musica_url;
-                    document.getElementById('musicaPreview').innerHTML = `
-                        <audio controls style="width: 100%;">
-                            <source src="${data.quiz.musica_url}" type="audio/mpeg">
-                        </audio>
-                        <p>✅ Música configurada</p>
-                    `;
                 }
                 perguntasAtuais = data.perguntas || [];
                 renderizarPerguntas();
@@ -233,27 +163,23 @@ function renderizarPerguntas() {
             <input type="text" placeholder="Texto da pergunta" value="${escapeHtml(p.texto || '')}" class="pergunta-texto" data-idx="${idx}">
             
             <div class="opcao-item">
-                <span class="opcao-simbolo resposta-a">★</span>
-                <input type="text" placeholder="Resposta completa (ex: Brasília)" value="${escapeHtml(p.opcao_a_texto || '')}" class="resposta-texto" data-opcao="A" data-idx="${idx}">
-                <input type="text" placeholder="Texto do botão (ex: BRA)" value="${escapeHtml(p.opcao_a_botao || '')}" class="botao-texto" data-opcao="A" data-idx="${idx}">
+                <span class="opcao-simbolo" style="color: #e74c3c;">★</span>
+                <input type="text" placeholder="Opção A (ex: Brasília)" value="${escapeHtml(p.opcao_a || '')}" class="resposta-texto" data-opcao="A" data-idx="${idx}">
             </div>
             
             <div class="opcao-item">
-                <span class="opcao-simbolo resposta-b">▲</span>
-                <input type="text" placeholder="Resposta completa (ex: São Paulo)" value="${escapeHtml(p.opcao_b_texto || '')}" class="resposta-texto" data-opcao="B" data-idx="${idx}">
-                <input type="text" placeholder="Texto do botão (ex: SP)" value="${escapeHtml(p.opcao_b_botao || '')}" class="botao-texto" data-opcao="B" data-idx="${idx}">
+                <span class="opcao-simbolo" style="color: #2ecc71;">▲</span>
+                <input type="text" placeholder="Opção B (ex: São Paulo)" value="${escapeHtml(p.opcao_b || '')}" class="resposta-texto" data-opcao="B" data-idx="${idx}">
             </div>
             
             <div class="opcao-item">
-                <span class="opcao-simbolo resposta-c">●</span>
-                <input type="text" placeholder="Resposta completa (ex: Salvador)" value="${escapeHtml(p.opcao_c_texto || '')}" class="resposta-texto" data-opcao="C" data-idx="${idx}">
-                <input type="text" placeholder="Texto do botão (ex: SA)" value="${escapeHtml(p.opcao_c_botao || '')}" class="botao-texto" data-opcao="C" data-idx="${idx}">
+                <span class="opcao-simbolo" style="color: #3498db;">●</span>
+                <input type="text" placeholder="Opção C (ex: Rio de Janeiro)" value="${escapeHtml(p.opcao_c || '')}" class="resposta-texto" data-opcao="C" data-idx="${idx}">
             </div>
             
             <div class="opcao-item">
-                <span class="opcao-simbolo resposta-d">■</span>
-                <input type="text" placeholder="Resposta completa (ex: Rio de Janeiro)" value="${escapeHtml(p.opcao_d_texto || '')}" class="resposta-texto" data-opcao="D" data-idx="${idx}">
-                <input type="text" placeholder="Texto do botão (ex: RIO)" value="${escapeHtml(p.opcao_d_botao || '')}" class="botao-texto" data-opcao="D" data-idx="${idx}">
+                <span class="opcao-simbolo" style="color: #f1c40f;">■</span>
+                <input type="text" placeholder="Opção D (ex: Salvador)" value="${escapeHtml(p.opcao_d || '')}" class="resposta-texto" data-opcao="D" data-idx="${idx}">
             </div>
             
             <div class="pergunta-footer">
@@ -307,18 +233,8 @@ function renderizarPerguntas() {
     document.querySelectorAll('.resposta-texto').forEach(input => {
         input.addEventListener('change', (e) => {
             const idx = parseInt(e.target.dataset.idx);
-            const opcao = e.target.dataset.opcao;
-            const campo = `opcao_${opcao.toLowerCase()}_texto`;
-            perguntasAtuais[idx][campo] = e.target.value;
-        });
-    });
-    
-    document.querySelectorAll('.botao-texto').forEach(input => {
-        input.addEventListener('change', (e) => {
-            const idx = parseInt(e.target.dataset.idx);
-            const opcao = e.target.dataset.opcao;
-            const campo = `opcao_${opcao.toLowerCase()}_botao`;
-            perguntasAtuais[idx][campo] = e.target.value;
+            const opcao = e.target.dataset.opcao.toLowerCase();
+            perguntasAtuais[idx][`opcao_${opcao}`] = e.target.value;
         });
     });
     
@@ -341,14 +257,10 @@ function adicionarPergunta() {
     perguntasAtuais.push({
         texto: '',
         imagem_url: null,
-        opcao_a_texto: '',
-        opcao_a_botao: '',
-        opcao_b_texto: '',
-        opcao_b_botao: '',
-        opcao_c_texto: '',
-        opcao_c_botao: '',
-        opcao_d_texto: '',
-        opcao_d_botao: '',
+        opcao_a: '',
+        opcao_b: '',
+        opcao_c: '',
+        opcao_d: '',
         correta: 'A',
         tempo: 15
     });
@@ -367,14 +279,11 @@ function salvarQuiz() {
         return;
     }
     
-    const musicaUrl = document.getElementById('musicaUrl').value;
-    const corFundo = document.getElementById('corFundo').value;
-    
     const data = {
         quiz_id: quizIdAtual,
         nome: nome,
-        cor_fundo: corFundo,
-        musica_url: musicaUrl,
+        cor_fundo: document.getElementById('corFundo').value,
+        musica_url: document.getElementById('musicaUrl').value,
         perguntas: JSON.stringify(perguntasAtuais)
     };
     
@@ -435,22 +344,56 @@ function criarSala() {
     .then(data => {
         if (data.sucesso) {
             codigoSalaAtual = data.codigo;
-            const linkControle = `${window.location.origin}/game-control?codigo=${codigoSalaAtual}`;
             
             document.getElementById('salaInfo').style.display = 'block';
             document.getElementById('codigoSalaDisplay').innerHTML = `📱 CÓDIGO: ${codigoSalaAtual}`;
-            document.getElementById('linkControleDisplay').innerHTML = `
-                <div class="link-controle-box">
-                    <strong>🔗 Link para controlar o jogo:</strong><br>
-                    <a href="${linkControle}" target="_blank">${linkControle}</a>
-                    <br><br>
-                    <button onclick="navigator.clipboard.writeText('${linkControle}')" class="btn-pequeno">📋 Copiar link</button>
-                    <button onclick="window.open('${linkControle}', '_blank')" class="btn-pequeno">🎮 Abrir Controle</button>
-                </div>
-            `;
+            
+            // Conectar socket para receber atualizações
+            conectarHost();
         } else {
             alert('Erro: ' + data.erro);
         }
+    });
+}
+
+function abrirApresentador() {
+    if (!codigoSalaAtual) {
+        alert('Crie uma sala primeiro!');
+        return;
+    }
+    
+    window.open(`/apresentador?codigo=${codigoSalaAtual}`, '_blank');
+}
+
+function conectarHost() {
+    if (socket) socket.disconnect();
+    
+    socket = io();
+    
+    socket.on('host-entrada-aceita', () => {
+        console.log('✅ Conectado como host');
+    });
+    
+    socket.on('atualizar-jogadores', (jogadores) => {
+        const lista = document.getElementById('listaJogadoresHost');
+        if (lista) {
+            lista.innerHTML = jogadores.map(j => `
+                <div class="jogador-item-host">${j.emoji} ${j.nome} - ${j.pontuacao} pts</div>
+            `).join('');
+        }
+    });
+    
+    socket.on('atualizar-ranking', (ranking) => {
+        const rankingDiv = document.getElementById('rankingHost');
+        if (rankingDiv) {
+            rankingDiv.innerHTML = ranking.slice(0, 10).map(r => `
+                <div class="ranking-item">${r.posicao}º ${r.emoji} ${r.nome} - ${r.pontuacao} pts</div>
+            `).join('');
+        }
+    });
+    
+    socket.on('fim-jogo', (data) => {
+        alert(`🏆 Jogo finalizado! Vencedor: ${data.ranking[0]?.nome}`);
     });
 }
 
@@ -468,8 +411,7 @@ function carregarHistorico() {
                         <div class="historico-card">
                             <strong>📅 ${new Date(h.data_hora).toLocaleString()}</strong><br>
                             🎯 Quiz ID: ${h.quiz_id}<br>
-                            🔢 Código da sala: ${h.codigo}<br>
-                            🏆 Ranking salvo
+                            🔢 Código da sala: ${h.codigo}
                         </div>
                     `).join('');
                 }
@@ -484,6 +426,17 @@ function deletarHistorico() {
                 alert('Histórico deletado!');
                 carregarHistorico();
             });
+    }
+}
+
+// ============ MÚSICA ============
+function testarMusica() {
+    const url = document.getElementById('musicaUrl').value;
+    if (url) {
+        const audio = new Audio(url);
+        audio.play().catch(e => alert('Não foi possível tocar. Verifique a URL.'));
+    } else {
+        alert('Digite uma URL de música MP3');
     }
 }
 

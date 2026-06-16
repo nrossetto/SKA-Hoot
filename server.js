@@ -225,7 +225,6 @@ app.post('/api/sala/criar', async (req, res) => {
       return res.json({ sucesso: false, erro: 'Quiz sem perguntas' });
     }
     
-    // Buscar configurações visuais do quiz
     const quizResult = await pool.query('SELECT cor_fundo, musica_url FROM quizzes WHERE id = $1', [quiz_id]);
     
     salas[codigo] = {
@@ -238,7 +237,7 @@ app.post('/api/sala/criar', async (req, res) => {
       ativo: true,
       jogoAtivo: false,
       respostasPerguntaAtual: {},
-      etapa: 'aguardando', // aguardando | pergunta | resultado | ranking | podio
+      etapa: 'aguardando',
       tempoRestante: 0,
       timerInterval: null,
       cor_fundo: quizResult.rows[0]?.cor_fundo || '#667eea',
@@ -301,15 +300,12 @@ io.on('connection', (socket) => {
         quizNome: sala.quizNome
       });
       io.to(data.codigo).emit('atualizar-jogadores', Object.values(sala.jogadores));
-      
-      // Se o apresentador já estiver conectado, enviar atualização
       io.to(`apresentador_${data.codigo}`).emit('atualizar-jogadores', Object.values(sala.jogadores));
     } else {
       socket.emit('erro', 'Código inválido ou sala inativa');
     }
   });
 
-  // Apresentador conecta
   socket.on('apresentador-conectar', (codigo) => {
     if (salas[codigo]) {
       socket.join(`apresentador_${codigo}`);
@@ -325,7 +321,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Apresentador inicia o jogo
   socket.on('apresentador-iniciar', (codigo) => {
     const sala = salas[codigo];
     if (sala && sala.perguntas.length > 0 && !sala.jogoAtivo) {
@@ -333,40 +328,33 @@ io.on('connection', (socket) => {
       sala.perguntaAtual = 0;
       sala.etapa = 'pergunta';
       
-      // Notificar todos que o jogo começou
       io.to(codigo).emit('jogo-iniciado');
       io.to(`apresentador_${codigo}`).emit('jogo-iniciado');
       
-      // Enviar a primeira pergunta
       enviarPergunta(codigo, 0);
     }
   });
 
-  // Apresentador avança (Resultado → Ranking → Próxima Pergunta)
   socket.on('apresentador-avancar', (codigo) => {
     const sala = salas[codigo];
     if (!sala || !sala.jogoAtivo) return;
 
     if (sala.etapa === 'resultado') {
-      // Avança para o ranking
       sala.etapa = 'ranking';
       enviarRanking(codigo);
       io.to(codigo).emit('mostrar-ranking');
       io.to(`apresentador_${codigo}`).emit('mostrar-ranking');
     } else if (sala.etapa === 'ranking') {
-      // Avança para a próxima pergunta
       const proximoIndice = sala.perguntaAtual + 1;
       if (proximoIndice < sala.perguntas.length) {
         sala.etapa = 'pergunta';
         enviarPergunta(codigo, proximoIndice);
       } else {
-        // Fim do jogo
         finalizarJogo(codigo);
       }
     }
   });
 
-  // Jogador responde
   socket.on('responder', (data) => {
     const sala = salas[data.codigo];
     if (!sala || !sala.jogoAtivo) return;
@@ -407,20 +395,24 @@ io.on('connection', (socket) => {
     const totalJogadores = Object.keys(sala.jogadores).length;
     const totalRespostas = Object.keys(sala.respostasPerguntaAtual).length;
     if (totalRespostas === totalJogadores && sala.jogoAtivo && sala.etapa === 'pergunta') {
-      // Todos responderam, vamos para o resultado
-      if (sala.timerInterval) clearInterval(sala.timerInterval);
+      // CANCELAR O TIMER
+      if (sala.timerInterval) {
+        clearInterval(sala.timerInterval);
+        sala.timerInterval = null;
+      }
+      
+      // Ir para o resultado após 1.5s
       setTimeout(() => {
         if (sala.jogoAtivo && sala.etapa === 'pergunta') {
           sala.etapa = 'resultado';
-          const relatorio = gerarRelatorio(codigo);
-          io.to(codigo).emit('mostrar-relatorio', relatorio);
-          io.to(`apresentador_${codigo}`).emit('mostrar-relatorio', relatorio);
+          const relatorio = gerarRelatorio(data.codigo);
+          io.to(data.codigo).emit('mostrar-relatorio', relatorio);
+          io.to(`apresentador_${data.codigo}`).emit('mostrar-relatorio', relatorio);
         }
       }, 1500);
     }
   });
 
-  // Função para gerar relatório
   function gerarRelatorio(codigo) {
     const sala = salas[codigo];
     if (!sala) return null;
@@ -471,12 +463,17 @@ io.on('connection', (socket) => {
     };
   }
 
-  // Função para enviar pergunta
   function enviarPergunta(codigo, indice) {
     const sala = salas[codigo];
     if (!sala || indice >= sala.perguntas.length) {
       finalizarJogo(codigo);
       return;
+    }
+    
+    // Limpar timer anterior se existir
+    if (sala.timerInterval) {
+      clearInterval(sala.timerInterval);
+      sala.timerInterval = null;
     }
     
     const pergunta = sala.perguntas[indice];
@@ -526,24 +523,23 @@ io.on('connection', (socket) => {
     io.to(codigo).emit('nova-pergunta-jogador', dadosJogador);
     io.to(`apresentador_${codigo}`).emit('nova-pergunta-apresentador', dadosApresentador);
     
-    // Timer automático
-    if (sala.timerInterval) clearInterval(sala.timerInterval);
+    // Iniciar timer
     sala.timerInterval = setInterval(() => {
       if (!sala.jogoAtivo || sala.etapa !== 'pergunta') {
         clearInterval(sala.timerInterval);
+        sala.timerInterval = null;
         return;
       }
       
       sala.tempoRestante--;
       
-      // Enviar atualização do timer para apresentador e jogadores
       io.to(codigo).emit('atualizar-timer', sala.tempoRestante);
       io.to(`apresentador_${codigo}`).emit('atualizar-timer', sala.tempoRestante);
       
       if (sala.tempoRestante <= 0) {
         clearInterval(sala.timerInterval);
+        sala.timerInterval = null;
         if (sala.jogoAtivo && sala.etapa === 'pergunta') {
-          // Tempo acabou, vai para o resultado
           sala.etapa = 'resultado';
           const relatorio = gerarRelatorio(codigo);
           io.to(codigo).emit('mostrar-relatorio', relatorio);
@@ -553,7 +549,6 @@ io.on('connection', (socket) => {
     }, 1000);
   }
 
-  // Função para enviar ranking
   function enviarRanking(codigo) {
     const sala = salas[codigo];
     if (!sala) return;
@@ -564,12 +559,14 @@ io.on('connection', (socket) => {
     io.to(`apresentador_${codigo}`).emit('atualizar-ranking', ranking);
   }
 
-  // Função para finalizar jogo
   async function finalizarJogo(codigo) {
     const sala = salas[codigo];
     if (!sala) return;
     
-    if (sala.timerInterval) clearInterval(sala.timerInterval);
+    if (sala.timerInterval) {
+      clearInterval(sala.timerInterval);
+      sala.timerInterval = null;
+    }
     
     const ranking = Object.values(sala.jogadores).sort((a, b) => b.pontuacao - a.pontuacao);
     try {
@@ -614,7 +611,7 @@ app.get('*', (req, res) => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`
   ╔═══════════════════════════════════════╗
-  ║     🎮 SKA-HOOT FINAL! 🎮             ║
+  ║     🎮 SKA-HOOT CORRIGIDO! 🎮         ║
   ╠═══════════════════════════════════════╣
   ║  Acesse: http://localhost:${PORT}      ║
   ║  Host: http://localhost:${PORT}/host   ║

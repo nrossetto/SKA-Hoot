@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SKA-HOOT - Apresentador</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1000px;
+            width: 100%;
+            background: rgba(255,255,255,0.05);
+            border-radius: 30px;
+            padding: 40px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+        .codigo {
+            font-size: 2em;
+            background: #27ae60;
+            padding: 10px 30px;
+            border-radius: 15px;
+            font-weight: bold;
+            letter-spacing: 5px;
+        }
+        .pergunta-area {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            min-height: 300px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .pergunta-texto {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .pergunta-imagem {
+            max-width: 100%;
+            max-height: 250px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+        }
+        .opcoes {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            width: 100%;
+            margin-top: 20px;
+        }
+        .opcao {
+            padding: 25px;
+            border-radius: 15px;
+            font-size: 1.3em;
+            font-weight: bold;
+            color: white;
+            text-align: center;
+        }
+        .opcao-a { background: #e74c3c; }
+        .opcao-b { background: #2ecc71; }
+        .opcao-c { background: #3498db; }
+        .opcao-d { background: #f1c40f; color: #2c3e50; }
+        
+        .sem-jogo {
+            text-align: center;
+            color: #7f8c8d;
+            font-size: 1.2em;
+        }
+        .sem-jogo h2 { color: white; margin-bottom: 20px; }
+        
+        .info-bar {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .jogadores, .ranking {
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+            padding: 20px;
+            color: white;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .jogadores h3, .ranking h3 {
+            margin-bottom: 15px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 10px;
+        }
+        .jogador-item, .ranking-item {
+            padding: 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            display: flex;
+            justify-content: space-between;
+        }
+        .timer {
+            width: 100%;
+            height: 10px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 5px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+        .timer-bar {
+            height: 100%;
+            width: 100%;
+            background: #f1c40f;
+            transition: width 0.1s linear;
+        }
+        @media (max-width: 768px) {
+            .opcoes { grid-template-columns: 1fr; }
+            .pergunta-texto { font-size: 1.5em; }
+            .info-bar { grid-template-columns: 1fr; }
+            .codigo { font-size: 1.5em; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 style="color: white;">🎮 Apresentador</h1>
+            <div class="codigo" id="codigoDisplay">---</div>
+        </div>
+        
+        <div class="timer">
+            <div class="timer-bar" id="timerBar"></div>
+        </div>
+        
+        <div class="pergunta-area" id="perguntaArea">
+            <div class="sem-jogo">
+                <h2>🎯 Aguardando o jogo começar...</h2>
+                <p>O apresentador verá a pergunta aqui quando o jogo iniciar.</p>
+            </div>
+        </div>
+        
+        <div class="info-bar">
+            <div class="jogadores">
+                <h3>👥 Jogadores (<span id="totalJogadores">0</span>)</h3>
+                <div id="listaJogadores"></div>
+            </div>
+            <div class="ranking">
+                <h3>🏆 Ranking</h3>
+                <div id="listaRanking"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const codigoSala = urlParams.get('codigo');
+        
+        if (!codigoSala) {
+            alert('Código da sala não informado!');
+            window.location.href = '/host';
+        }
+        
+        document.getElementById('codigoDisplay').innerHTML = `📱 ${codigoSala}`;
+        
+        const socket = io();
+        let timerInterval;
+        
+        socket.on('connect', () => {
+            console.log('Conectado');
+            socket.emit('host-conectar', codigoSala);
+        });
+        
+        socket.on('host-entrada-aceita', () => {
+            console.log('Conectado à sala como apresentador');
+        });
+        
+        socket.on('nova-pergunta-host', (data) => {
+            const area = document.getElementById('perguntaArea');
+            const pergunta = data.pergunta;
+            
+            let imagemHtml = '';
+            if (pergunta.imagem_url) {
+                imagemHtml = `<img src="${pergunta.imagem_url}" class="pergunta-imagem">`;
+            }
+            
+            area.innerHTML = `
+                ${imagemHtml}
+                <div class="pergunta-texto">${pergunta.texto}</div>
+                <div class="opcoes">
+                    <div class="opcao opcao-a">🔴 A - ${pergunta.opcoes.A}</div>
+                    <div class="opcao opcao-b">🟢 B - ${pergunta.opcoes.B}</div>
+                    <div class="opcao opcao-c">🔵 C - ${pergunta.opcoes.C}</div>
+                    <div class="opcao opcao-d">🟡 D - ${pergunta.opcoes.D}</div>
+                </div>
+            `;
+            
+            // Timer
+            let tempo = pergunta.tempo;
+            const barra = document.getElementById('timerBar');
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                tempo--;
+                const percentual = (tempo / pergunta.tempo) * 100;
+                barra.style.width = `${percentual}%`;
+                if (tempo <= 0) clearInterval(timerInterval);
+            }, 1000);
+        });
+        
+        socket.on('atualizar-jogadores', (jogadores) => {
+            const lista = document.getElementById('listaJogadores');
+            document.getElementById('totalJogadores').innerText = jogadores.length;
+            lista.innerHTML = jogadores.map(j => 
+                `<div class="jogador-item">${j.emoji} ${j.nome} - ${j.pontuacao} pts</div>`
+            ).join('');
+        });
+        
+        socket.on('atualizar-ranking', (ranking) => {
+            const lista = document.getElementById('listaRanking');
+            lista.innerHTML = ranking.slice(0, 10).map(r => 
+                `<div class="ranking-item">${r.posicao}º ${r.emoji} ${r.nome} - ${r.pontuacao} pts</div>`
+            ).join('');
+        });
+        
+        socket.on('fim-jogo', (data) => {
+            const area = document.getElementById('perguntaArea');
+            area.innerHTML = `
+                <div style="text-align: center; padding: 40px;">
+                    <h2 style="color: #f1c40f; font-size: 3em;">🏆 FIM DE JOGO!</h2>
+                    <p style="color: #2c3e50; font-size: 1.5em; margin-top: 20px;">
+                        Campeão: ${data.ranking[0]?.nome}
+                    </p>
+                    <p style="color: #2c3e50; font-size: 1.2em;">
+                        ${data.ranking[0]?.pontuacao} pontos
+                    </p>
+                </div>
+            `;
+            clearInterval(timerInterval);
+        });
+    </script>
+</body>
+</html>

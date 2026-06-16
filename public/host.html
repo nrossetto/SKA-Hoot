@@ -17,7 +17,6 @@
         
         <!-- Dashboard Principal -->
         <div id="telaDashboard" style="display:none;">
-            <!-- Top Bar -->
             <div class="dashboard-header">
                 <h1>🎮 SKA-HOOT 2.0</h1>
                 <div class="header-controls">
@@ -25,7 +24,6 @@
                 </div>
             </div>
             
-            <!-- Abas -->
             <div class="tabs">
                 <button class="tab-btn active" onclick="mostrarTab('quizzes')">📚 Meus Quizzes</button>
                 <button class="tab-btn" onclick="mostrarTab('editar')">✏️ Criar/Editar Quiz</button>
@@ -44,15 +42,13 @@
             <div id="tabEditar" class="tab-content" style="display:none;">
                 <div class="editor-header">
                     <select id="quizSelecionado" onchange="carregarQuiz(this.value)">
-                        <option value="">-- Selecione um quiz ou crie novo --</option>
+                        <option value="">-- Selecione um quiz --</option>
                     </select>
                     <input type="text" id="quizNome" placeholder="Nome do Quiz" class="input-medio">
                     <button onclick="salvarQuiz()" class="btn-principal-pequeno">💾 Salvar Quiz</button>
                 </div>
                 
-                <div id="editorPerguntas" class="editor-perguntas">
-                    <!-- Perguntas serão inseridas aqui via JS -->
-                </div>
+                <div id="editorPerguntas" class="editor-perguntas"></div>
                 
                 <button onclick="adicionarPergunta()" class="btn-secundario">+ Adicionar Pergunta</button>
             </div>
@@ -62,14 +58,23 @@
                 <div class="jogar-container">
                     <div class="jogar-config">
                         <select id="quizJogar" onchange="selecionarQuizJogar(this.value)">
-                            <option value="">-- Selecione um quiz para jogar --</option>
+                            <option value="">-- Selecione um quiz --</option>
                         </select>
                         <button onclick="criarSala()" class="btn-principal">🚀 CRIAR SALA</button>
                     </div>
                     
-                    <div id="salaInfo" class="sala-info-box" style="display:none;">
+                    <div id="salaInfo" style="display:none; margin-top: 20px;">
                         <div class="codigo-sala-grande" id="codigoSalaDisplay"></div>
-                        <div class="link-controle" id="linkControleDisplay"></div>
+                        
+                        <!-- CONTROLES DO JOGO - VISÍVEIS AQUI -->
+                        <div class="controles-jogo" style="display: flex; gap: 15px; justify-content: center; margin: 20px 0; flex-wrap: wrap;">
+                            <button id="btnIniciarJogo" onclick="iniciarJogo()" class="btn-jogo" style="background: #27ae60; color: white; padding: 15px 40px; border: none; border-radius: 10px; font-size: 1.2em; cursor: pointer;">
+                                ▶ INICIAR JOGO
+                            </button>
+                            <button id="btnProximaPergunta" onclick="proximaPergunta()" class="btn-jogo" style="background: #3498db; color: white; padding: 15px 40px; border: none; border-radius: 10px; font-size: 1.2em; cursor: pointer;" disabled>
+                                ⏭ PRÓXIMA PERGUNTA
+                            </button>
+                        </div>
                         
                         <!-- BOTÃO DO APRESENTADOR -->
                         <div style="margin: 20px 0; text-align: center;">
@@ -81,7 +86,17 @@
                             </p>
                         </div>
                         
-                        <p style="color: #ecf0f1; text-align: center;">📌 Os jogadores acessam: <strong>https://ska-hoot.onrender.com</strong> com o código acima</p>
+                        <div id="jogadoresInfo" style="background: #34495e; padding: 15px; border-radius: 10px; margin: 15px 0; color: white;">
+                            <h3>👥 Jogadores na sala: <span id="totalJogadores">0</span></h3>
+                            <div id="listaJogadoresHost"></div>
+                        </div>
+                        
+                        <div id="rankingInfo" style="background: #34495e; padding: 15px; border-radius: 10px; margin: 15px 0; color: white;">
+                            <h3>🏆 Ranking</h3>
+                            <div id="rankingHost"></div>
+                        </div>
+                        
+                        <p style="color: #ecf0f1; text-align: center;">📌 Jogadores acessam: <strong>https://ska-hoot.onrender.com</strong> com o código acima</p>
                     </div>
                 </div>
             </div>
@@ -90,22 +105,14 @@
             <div id="tabConfig" class="tab-content" style="display:none;">
                 <div class="config-panel">
                     <h3>🎨 Personalização do Quiz</h3>
-                    
                     <div class="config-item">
                         <label>🎵 Música de fundo (URL MP3):</label>
                         <input type="text" id="musicaUrl" placeholder="https://exemplo.com/musica.mp3" class="input-grande">
                         <button onclick="testarMusica()" class="btn-pequeno">▶️ Testar</button>
                     </div>
-                    
                     <div class="config-item">
                         <label>🎨 Cor de fundo do jogo:</label>
                         <input type="color" id="corFundo" value="#667eea">
-                    </div>
-                    
-                    <div class="config-item">
-                        <label>🖼️ Logo do jogo:</label>
-                        <input type="file" id="uploadLogo" accept="image/*">
-                        <div id="previewLogo"></div>
                     </div>
                     <button onclick="salvarConfigQuiz()" class="btn-principal">💾 Salvar Configurações</button>
                 </div>

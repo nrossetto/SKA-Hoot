@@ -103,7 +103,6 @@ function deletarQuiz(id) {
     }
 }
 
-// ============ UPLOAD DE MÚSICA ============
 function uploadMusica() {
     const fileInput = document.getElementById('uploadMusica');
     const file = fileInput.files[0];
@@ -133,7 +132,6 @@ function uploadMusica() {
     });
 }
 
-// ============ EDITOR DE PERGUNTAS ============
 function carregarQuiz(id) {
     if (!id) return;
     quizIdAtual = id;
@@ -223,7 +221,6 @@ function renderizarPerguntas() {
         </div>
     `).join('');
     
-    // Event listeners
     document.querySelectorAll('.upload-imagem-edit').forEach(input => {
         input.addEventListener('change', async (e) => {
             const idx = parseInt(e.target.dataset.idx);
@@ -376,6 +373,8 @@ function criarSala() {
             document.getElementById('salaInfo').style.display = 'block';
             document.getElementById('codigoSalaDisplay').innerHTML = `📱 CÓDIGO: ${codigoSalaAtual}`;
             document.getElementById('btnIniciarJogo').disabled = false;
+            // Esconder controles avançados inicialmente
+            document.getElementById('controlesAvancados').style.display = 'none';
             conectarHost();
         } else {
             alert('Erro: ' + data.erro);
@@ -396,14 +395,31 @@ function iniciarJogo() {
     if (confirm('Iniciar o jogo agora?')) {
         socket.emit('iniciar-jogo', codigoSalaAtual);
         document.getElementById('btnIniciarJogo').disabled = true;
-        document.getElementById('btnProximaPergunta').disabled = false;
+        document.getElementById('controlesAvancados').style.display = 'flex';
+        document.getElementById('btnProximaPergunta').disabled = true;
+        document.getElementById('btnAvancarRanking').disabled = true;
     }
+}
+
+function avancarRelatorio() {
+    if (!codigoSalaAtual) return;
+    socket.emit('avancar-relatorio', codigoSalaAtual);
+    document.getElementById('btnAvancarRelatorio').disabled = true;
+    document.getElementById('btnAvancarRanking').disabled = false;
+}
+
+function avancarRanking() {
+    if (!codigoSalaAtual) return;
+    socket.emit('avancar-ranking', codigoSalaAtual);
+    document.getElementById('btnAvancarRanking').disabled = true;
+    document.getElementById('btnProximaPergunta').disabled = false;
 }
 
 function proximaPergunta() {
     if (!codigoSalaAtual) return;
-    socket.emit('proxima-pergunta', codigoSalaAtual);
+    socket.emit('avancar-proxima-pergunta', codigoSalaAtual);
     document.getElementById('btnProximaPergunta').disabled = true;
+    document.getElementById('btnAvancarRelatorio').disabled = false;
 }
 
 function conectarHost() {
@@ -411,6 +427,82 @@ function conectarHost() {
     socket = io();
     
     socket.on('host-entrada-aceita', () => console.log('Conectado'));
+    
+    socket.on('nova-pergunta-host', (data) => {
+        document.getElementById('btnAvancarRelatorio').disabled = false;
+        document.getElementById('btnAvancarRanking').disabled = true;
+        document.getElementById('btnProximaPergunta').disabled = true;
+        
+        const espelho = document.getElementById('espelhoPergunta');
+        if (espelho) {
+            const p = data.pergunta;
+            espelho.innerHTML = `
+                <h3>📢 Pergunta ${data.numero} de ${data.total}</h3>
+                ${p.imagem_url ? `<img src="${p.imagem_url}" style="max-width: 200px;">` : ''}
+                <p><strong>${p.texto}</strong></p>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:10px 0;">
+                    <div style="background:#e74c3c; color:white; padding:10px; border-radius:8px;">🔴 A: ${p.opcoes.A}</div>
+                    <div style="background:#2ecc71; color:white; padding:10px; border-radius:8px;">🟢 B: ${p.opcoes.B}</div>
+                    <div style="background:#3498db; color:white; padding:10px; border-radius:8px;">🔵 C: ${p.opcoes.C}</div>
+                    <div style="background:#f1c40f; color:#2c3e50; padding:10px; border-radius:8px;">🟡 D: ${p.opcoes.D}</div>
+                </div>
+                <p>⏱ Tempo: ${p.tempo}s</p>
+                <p style="color:#7f8c8d; font-size:0.9em;">Botões: ${p.botoes.A} | ${p.botoes.B} | ${p.botoes.C} | ${p.botoes.D}</p>
+            `;
+        }
+    });
+    
+    socket.on('mostrar-relatorio', (relatorio) => {
+        const espelho = document.getElementById('espelhoPergunta');
+        if (espelho) {
+            espelho.innerHTML = `
+                <h3>📊 RELATÓRIO DA PERGUNTA</h3>
+                <p><strong>${relatorio.pergunta}</strong></p>
+                <p>✅ Resposta correta: <strong>${relatorio.respostaCorreta}</strong></p>
+                <hr>
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin:10px 0;">
+                    <div style="background:#27ae60; color:white; padding:15px; border-radius:10px; text-align:center;">
+                        <div style="font-size:2em;">✅</div>
+                        <div>${relatorio.pctAcertos}%</div>
+                        <div>Acertaram (${relatorio.acertos})</div>
+                    </div>
+                    <div style="background:#e74c3c; color:white; padding:15px; border-radius:10px; text-align:center;">
+                        <div style="font-size:2em;">❌</div>
+                        <div>${relatorio.pctErros}%</div>
+                        <div>Erraram (${relatorio.erros})</div>
+                    </div>
+                    <div style="background:#95a5a6; color:white; padding:15px; border-radius:10px; text-align:center;">
+                        <div style="font-size:2em;">⏭</div>
+                        <div>${relatorio.pctNaoResponderam}%</div>
+                        <div>Não responderam</div>
+                    </div>
+                </div>
+                <div style="background:#ecf0f1; padding:10px; border-radius:8px; margin:10px 0;">
+                    <h4>Distribuição das respostas:</h4>
+                    <div>🔴 A: ${relatorio.distribuicao.A}</div>
+                    <div>🟢 B: ${relatorio.distribuicao.B}</div>
+                    <div>🔵 C: ${relatorio.distribuicao.C}</div>
+                    <div>🟡 D: ${relatorio.distribuicao.D}</div>
+                </div>
+                <p style="color:#7f8c8d; font-size:0.9em;">${relatorio.totalResponderam} de ${relatorio.totalJogadores} responderam</p>
+            `;
+        }
+        document.getElementById('btnAvancarRelatorio').disabled = true;
+        document.getElementById('btnAvancarRanking').disabled = false;
+    });
+    
+    socket.on('mostrar-ranking-parcial', () => {
+        const espelho = document.getElementById('espelhoPergunta');
+        if (espelho) {
+            espelho.innerHTML += `
+                <hr>
+                <h4>🏆 RANKING PARCIAL</h4>
+                <p>Veja o ranking ao lado!</p>
+            `;
+        }
+        document.getElementById('btnAvancarRanking').disabled = true;
+        document.getElementById('btnProximaPergunta').disabled = false;
+    });
     
     socket.on('atualizar-jogadores', (jogadores) => {
         const lista = document.getElementById('listaJogadoresHost');
@@ -428,9 +520,19 @@ function conectarHost() {
     });
     
     socket.on('fim-jogo', (data) => {
-        alert(`🏆 Jogo finalizado! Vencedor: ${data.ranking[0]?.nome}`);
+        alert(`🏆 JOGO FINALIZADO! Vencedor: ${data.ranking[0]?.nome}`);
         document.getElementById('btnIniciarJogo').disabled = false;
-        document.getElementById('btnProximaPergunta').disabled = true;
+        document.getElementById('controlesAvancados').style.display = 'none';
+        const espelho = document.getElementById('espelhoPergunta');
+        if (espelho) {
+            espelho.innerHTML = `
+                <h2 style="color:#f1c40f;">🏆 FIM DE JOGO!</h2>
+                <h3>Campeão: ${data.ranking[0]?.nome}</h3>
+                <p>${data.ranking[0]?.pontuacao} pontos</p>
+                <h4>Top 3:</h4>
+                ${data.ranking.slice(0, 3).map((r, i) => `<p>${i+1}º ${r.emoji} ${r.nome} - ${r.pontuacao} pts</p>`).join('')}
+            `;
+        }
     });
 }
 

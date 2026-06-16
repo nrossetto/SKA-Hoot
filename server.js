@@ -464,12 +464,12 @@ app.get('/host', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'host.html'));
 });
 
-app.get('/game-control', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'game-control.html'));
+app.get('/apresentador', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'apresentador.html'));
 });
 
-app.get('/controle', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'controle.html'));
+app.get('/game-control', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'game-control.html'));
 });
 
 app.get('/teste.html', (req, res) => {
@@ -489,7 +489,7 @@ server.listen(PORT, '0.0.0.0', () => {
   ╠═══════════════════════════════════════╣
   ║  Acesse: http://localhost:${PORT}      ║
   ║  Tela do Host: http://localhost:${PORT}/host ║
-  ║  Controle: http://localhost:${PORT}/game-control ║
+  ║  Apresentador: http://localhost:${PORT}/apresentador ║
   ║  Senha Mestra: ${SENHA_MESTRA}         ║
   ╚═══════════════════════════════════════╝
   `);

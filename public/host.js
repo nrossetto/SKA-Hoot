@@ -1,6 +1,5 @@
 let socket;
 let codigoSalaAtual = '';
-let quizAtual = null;
 let perguntasAtuais = [];
 let quizIdAtual = null;
 
@@ -27,6 +26,7 @@ function verificarSenha() {
 
 function logout() { location.reload(); }
 
+// ============ QUIZZES ============
 function carregarQuizzes() {
     fetch('/api/quiz/listar')
         .then(res => res.json())
@@ -34,7 +34,7 @@ function carregarQuizzes() {
             if (data.sucesso) {
                 const grid = document.getElementById('quizzesGrid');
                 if (data.quizzes.length === 0) {
-                    grid.innerHTML = '<div class="empty-state">Nenhum quiz criado ainda.</div>';
+                    grid.innerHTML = '<div class="empty-state">Nenhum quiz criado.</div>';
                 } else {
                     grid.innerHTML = data.quizzes.map(q => `
                         <div class="quiz-card">
@@ -103,6 +103,20 @@ function deletarQuiz(id) {
     }
 }
 
+function selecionarQuizJogar(id) {
+    if (id) {
+        fetch(`/api/quiz/carregar/${id}`)
+            .then(res => res.json())
+            .then(data => {
+                if (!data.sucesso || data.perguntas.length === 0) {
+                    alert('Este quiz não tem perguntas!');
+                    document.getElementById('quizJogar').value = '';
+                }
+            });
+    }
+}
+
+// ============ UPLOAD DE MÚSICA ============
 function uploadMusica() {
     const fileInput = document.getElementById('uploadMusica');
     const file = fileInput.files[0];
@@ -132,6 +146,7 @@ function uploadMusica() {
     });
 }
 
+// ============ EDITOR ============
 function carregarQuiz(id) {
     if (!id) return;
     quizIdAtual = id;
@@ -338,22 +353,7 @@ function salvarConfigQuiz() {
     salvarQuiz();
 }
 
-// ============ JOGO ============
-function selecionarQuizJogar(id) {
-    if (id) {
-        fetch(`/api/quiz/carregar/${id}`)
-            .then(res => res.json())
-            .then(data => {
-                if (data.sucesso && data.perguntas.length > 0) {
-                    quizAtual = data;
-                } else {
-                    alert('Este quiz não tem perguntas!');
-                    document.getElementById('quizJogar').value = '';
-                }
-            });
-    }
-}
-
+// ============ CRIAR SALA ============
 function criarSala() {
     const quizId = document.getElementById('quizJogar').value;
     if (!quizId) {
@@ -371,14 +371,25 @@ function criarSala() {
         if (data.sucesso) {
             codigoSalaAtual = data.codigo;
             document.getElementById('salaInfo').style.display = 'block';
-            document.getElementById('codigoSalaDisplay').innerHTML = `📱 CÓDIGO: ${codigoSalaAtual}`;
-            document.getElementById('btnIniciarJogo').disabled = false;
-            // Esconder controles avançados inicialmente
-            document.getElementById('controlesAvancados').style.display = 'none';
-            conectarHost();
+            document.getElementById('codigoDisplay').innerHTML = codigoSalaAtual;
         } else {
             alert('Erro: ' + data.erro);
         }
+    });
+}
+
+function copiarCodigo() {
+    navigator.clipboard.writeText(codigoSalaAtual).then(() => {
+        alert('✅ Código copiado!');
+    }).catch(() => {
+        // Fallback
+        const input = document.createElement('input');
+        input.value = codigoSalaAtual;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+        alert('✅ Código copiado!');
     });
 }
 
@@ -390,152 +401,7 @@ function abrirApresentador() {
     window.open(`/apresentador?codigo=${codigoSalaAtual}`, '_blank');
 }
 
-function iniciarJogo() {
-    if (!codigoSalaAtual) return;
-    if (confirm('Iniciar o jogo agora?')) {
-        socket.emit('iniciar-jogo', codigoSalaAtual);
-        document.getElementById('btnIniciarJogo').disabled = true;
-        document.getElementById('controlesAvancados').style.display = 'flex';
-        document.getElementById('btnProximaPergunta').disabled = true;
-        document.getElementById('btnAvancarRanking').disabled = true;
-    }
-}
-
-function avancarRelatorio() {
-    if (!codigoSalaAtual) return;
-    socket.emit('avancar-relatorio', codigoSalaAtual);
-    document.getElementById('btnAvancarRelatorio').disabled = true;
-    document.getElementById('btnAvancarRanking').disabled = false;
-}
-
-function avancarRanking() {
-    if (!codigoSalaAtual) return;
-    socket.emit('avancar-ranking', codigoSalaAtual);
-    document.getElementById('btnAvancarRanking').disabled = true;
-    document.getElementById('btnProximaPergunta').disabled = false;
-}
-
-function proximaPergunta() {
-    if (!codigoSalaAtual) return;
-    socket.emit('avancar-proxima-pergunta', codigoSalaAtual);
-    document.getElementById('btnProximaPergunta').disabled = true;
-    document.getElementById('btnAvancarRelatorio').disabled = false;
-}
-
-function conectarHost() {
-    if (socket) socket.disconnect();
-    socket = io();
-    
-    socket.on('host-entrada-aceita', () => console.log('Conectado'));
-    
-    socket.on('nova-pergunta-host', (data) => {
-        document.getElementById('btnAvancarRelatorio').disabled = false;
-        document.getElementById('btnAvancarRanking').disabled = true;
-        document.getElementById('btnProximaPergunta').disabled = true;
-        
-        const espelho = document.getElementById('espelhoPergunta');
-        if (espelho) {
-            const p = data.pergunta;
-            espelho.innerHTML = `
-                <h3>📢 Pergunta ${data.numero} de ${data.total}</h3>
-                ${p.imagem_url ? `<img src="${p.imagem_url}" style="max-width: 200px;">` : ''}
-                <p><strong>${p.texto}</strong></p>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:10px 0;">
-                    <div style="background:#e74c3c; color:white; padding:10px; border-radius:8px;">🔴 A: ${p.opcoes.A}</div>
-                    <div style="background:#2ecc71; color:white; padding:10px; border-radius:8px;">🟢 B: ${p.opcoes.B}</div>
-                    <div style="background:#3498db; color:white; padding:10px; border-radius:8px;">🔵 C: ${p.opcoes.C}</div>
-                    <div style="background:#f1c40f; color:#2c3e50; padding:10px; border-radius:8px;">🟡 D: ${p.opcoes.D}</div>
-                </div>
-                <p>⏱ Tempo: ${p.tempo}s</p>
-                <p style="color:#7f8c8d; font-size:0.9em;">Botões: ${p.botoes.A} | ${p.botoes.B} | ${p.botoes.C} | ${p.botoes.D}</p>
-            `;
-        }
-    });
-    
-    socket.on('mostrar-relatorio', (relatorio) => {
-        const espelho = document.getElementById('espelhoPergunta');
-        if (espelho) {
-            espelho.innerHTML = `
-                <h3>📊 RELATÓRIO DA PERGUNTA</h3>
-                <p><strong>${relatorio.pergunta}</strong></p>
-                <p>✅ Resposta correta: <strong>${relatorio.respostaCorreta}</strong></p>
-                <hr>
-                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin:10px 0;">
-                    <div style="background:#27ae60; color:white; padding:15px; border-radius:10px; text-align:center;">
-                        <div style="font-size:2em;">✅</div>
-                        <div>${relatorio.pctAcertos}%</div>
-                        <div>Acertaram (${relatorio.acertos})</div>
-                    </div>
-                    <div style="background:#e74c3c; color:white; padding:15px; border-radius:10px; text-align:center;">
-                        <div style="font-size:2em;">❌</div>
-                        <div>${relatorio.pctErros}%</div>
-                        <div>Erraram (${relatorio.erros})</div>
-                    </div>
-                    <div style="background:#95a5a6; color:white; padding:15px; border-radius:10px; text-align:center;">
-                        <div style="font-size:2em;">⏭</div>
-                        <div>${relatorio.pctNaoResponderam}%</div>
-                        <div>Não responderam</div>
-                    </div>
-                </div>
-                <div style="background:#ecf0f1; padding:10px; border-radius:8px; margin:10px 0;">
-                    <h4>Distribuição das respostas:</h4>
-                    <div>🔴 A: ${relatorio.distribuicao.A}</div>
-                    <div>🟢 B: ${relatorio.distribuicao.B}</div>
-                    <div>🔵 C: ${relatorio.distribuicao.C}</div>
-                    <div>🟡 D: ${relatorio.distribuicao.D}</div>
-                </div>
-                <p style="color:#7f8c8d; font-size:0.9em;">${relatorio.totalResponderam} de ${relatorio.totalJogadores} responderam</p>
-            `;
-        }
-        document.getElementById('btnAvancarRelatorio').disabled = true;
-        document.getElementById('btnAvancarRanking').disabled = false;
-    });
-    
-    socket.on('mostrar-ranking-parcial', () => {
-        const espelho = document.getElementById('espelhoPergunta');
-        if (espelho) {
-            espelho.innerHTML += `
-                <hr>
-                <h4>🏆 RANKING PARCIAL</h4>
-                <p>Veja o ranking ao lado!</p>
-            `;
-        }
-        document.getElementById('btnAvancarRanking').disabled = true;
-        document.getElementById('btnProximaPergunta').disabled = false;
-    });
-    
-    socket.on('atualizar-jogadores', (jogadores) => {
-        const lista = document.getElementById('listaJogadoresHost');
-        document.getElementById('totalJogadores').innerText = jogadores.length;
-        lista.innerHTML = jogadores.map(j => 
-            `<div class="jogador-item-host">${j.emoji} ${j.nome} - ${j.pontuacao} pts</div>`
-        ).join('');
-    });
-    
-    socket.on('atualizar-ranking', (ranking) => {
-        const rankingDiv = document.getElementById('rankingHost');
-        rankingDiv.innerHTML = ranking.slice(0, 10).map(r => 
-            `<div class="ranking-item">${r.posicao}º ${r.emoji} ${r.nome} - ${r.pontuacao} pts</div>`
-        ).join('');
-    });
-    
-    socket.on('fim-jogo', (data) => {
-        alert(`🏆 JOGO FINALIZADO! Vencedor: ${data.ranking[0]?.nome}`);
-        document.getElementById('btnIniciarJogo').disabled = false;
-        document.getElementById('controlesAvancados').style.display = 'none';
-        const espelho = document.getElementById('espelhoPergunta');
-        if (espelho) {
-            espelho.innerHTML = `
-                <h2 style="color:#f1c40f;">🏆 FIM DE JOGO!</h2>
-                <h3>Campeão: ${data.ranking[0]?.nome}</h3>
-                <p>${data.ranking[0]?.pontuacao} pontos</p>
-                <h4>Top 3:</h4>
-                ${data.ranking.slice(0, 3).map((r, i) => `<p>${i+1}º ${r.emoji} ${r.nome} - ${r.pontuacao} pts</p>`).join('')}
-            `;
-        }
-    });
-}
-
+// ============ HISTÓRICO ============
 function carregarHistorico() {
     fetch('/api/historico')
         .then(res => res.json())
@@ -563,7 +429,7 @@ function deletarHistorico() {
 function mostrarTab(tab) {
     document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    const tabs = { quizzes: 0, editar: 1, jogar: 2, config: 3, historico: 4 };
+    const tabs = { quizzes: 0, editar: 1, sala: 2, config: 3, historico: 4 };
     const tabName = tab.charAt(0).toUpperCase() + tab.slice(1);
     document.getElementById(`tab${tabName}`).style.display = 'block';
     document.querySelectorAll('.tab-btn')[tabs[tab]].classList.add('active');

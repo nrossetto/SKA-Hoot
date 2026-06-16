@@ -8,14 +8,12 @@
 </head>
 <body class="host-body">
     <div class="container host-container">
-        <!-- Tela de Login -->
         <div id="telaLogin" class="login-container">
             <h1>🔐 SKA-HOOT Host</h1>
             <input type="password" id="senha" placeholder="Senha mestra" class="input-grande">
             <button onclick="verificarSenha()" class="btn-principal">Entrar</button>
         </div>
         
-        <!-- Dashboard Principal -->
         <div id="telaDashboard" style="display:none;">
             <div class="dashboard-header">
                 <h1>🎮 SKA-HOOT 2.0</h1>
@@ -32,13 +30,11 @@
                 <button class="tab-btn" onclick="mostrarTab('historico')">📜 Histórico</button>
             </div>
             
-            <!-- Tab 1: Lista de Quizzes -->
             <div id="tabQuizzes" class="tab-content">
                 <div class="quizzes-grid" id="quizzesGrid"></div>
                 <button onclick="criarNovoQuiz()" class="btn-secundario">+ Criar Novo Quiz</button>
             </div>
             
-            <!-- Tab 2: Editor de Quiz -->
             <div id="tabEditar" class="tab-content" style="display:none;">
                 <div class="editor-header">
                     <select id="quizSelecionado" onchange="carregarQuiz(this.value)">
@@ -47,13 +43,11 @@
                     <input type="text" id="quizNome" placeholder="Nome do Quiz" class="input-medio">
                     <button onclick="salvarQuiz()" class="btn-principal-pequeno">💾 Salvar Quiz</button>
                 </div>
-                
                 <div id="editorPerguntas" class="editor-perguntas"></div>
-                
                 <button onclick="adicionarPergunta()" class="btn-secundario">+ Adicionar Pergunta</button>
             </div>
             
-            <!-- Tab 3: Iniciar Jogo -->
+            <!-- Tab Jogar -->
             <div id="tabJogar" class="tab-content" style="display:none;">
                 <div class="jogar-container">
                     <div class="jogar-config">
@@ -66,15 +60,27 @@
                     <div id="salaInfo" style="display:none; margin-top: 20px;">
                         <div class="codigo-sala-grande" id="codigoSalaDisplay"></div>
                         
+                        <!-- Controles principais -->
                         <div class="controles-jogo" style="display: flex; gap: 15px; justify-content: center; margin: 20px 0; flex-wrap: wrap;">
                             <button id="btnIniciarJogo" onclick="iniciarJogo()" class="btn-jogo" style="background: #27ae60; color: white; padding: 15px 40px; border: none; border-radius: 10px; font-size: 1.2em; cursor: pointer;">
                                 ▶ INICIAR JOGO
                             </button>
-                            <button id="btnProximaPergunta" onclick="proximaPergunta()" class="btn-jogo" style="background: #3498db; color: white; padding: 15px 40px; border: none; border-radius: 10px; font-size: 1.2em; cursor: pointer;" disabled>
+                        </div>
+                        
+                        <!-- Controles avançados (aparecem depois de iniciar) -->
+                        <div id="controlesAvancados" style="display: none; gap: 15px; justify-content: center; margin: 20px 0; flex-wrap: wrap;">
+                            <button id="btnAvancarRelatorio" onclick="avancarRelatorio()" class="btn-jogo" style="background: #f39c12; color: white; padding: 15px 30px; border: none; border-radius: 10px; font-size: 1em; cursor: pointer;">
+                                📊 VER RELATÓRIO
+                            </button>
+                            <button id="btnAvancarRanking" onclick="avancarRanking()" class="btn-jogo" style="background: #9b59b6; color: white; padding: 15px 30px; border: none; border-radius: 10px; font-size: 1em; cursor: pointer;" disabled>
+                                🏆 VER RANKING
+                            </button>
+                            <button id="btnProximaPergunta" onclick="proximaPergunta()" class="btn-jogo" style="background: #3498db; color: white; padding: 15px 30px; border: none; border-radius: 10px; font-size: 1em; cursor: pointer;" disabled>
                                 ⏭ PRÓXIMA PERGUNTA
                             </button>
                         </div>
                         
+                        <!-- Botão Apresentador -->
                         <div style="margin: 20px 0; text-align: center;">
                             <button onclick="abrirApresentador()" class="btn-principal" style="background: #9b59b6; width: auto; padding: 15px 40px; font-size: 1.2em;">
                                 🖥️ ABRIR APRESENTADOR
@@ -84,6 +90,12 @@
                             </p>
                         </div>
                         
+                        <!-- Espelho da Pergunta (Host vê) -->
+                        <div id="espelhoPergunta" style="background: white; border-radius: 15px; padding: 20px; margin: 20px 0; min-height: 150px; color: #2c3e50;">
+                            <p style="color: #7f8c8d; text-align: center;">Aguardando início do jogo...</p>
+                        </div>
+                        
+                        <!-- Jogadores e Ranking -->
                         <div id="jogadoresInfo" style="background: #34495e; padding: 15px; border-radius: 10px; margin: 15px 0; color: white;">
                             <h3>👥 Jogadores na sala: <span id="totalJogadores">0</span></h3>
                             <div id="listaJogadoresHost"></div>
@@ -99,12 +111,9 @@
                 </div>
             </div>
             
-            <!-- Tab 4: Personalização -->
             <div id="tabConfig" class="tab-content" style="display:none;">
                 <div class="config-panel">
                     <h3>🎨 Personalização do Quiz</h3>
-                    
-                    <!-- Upload de música MP3 -->
                     <div class="config-item">
                         <label>🎵 Música de fundo (MP3):</label>
                         <input type="file" id="uploadMusica" accept="audio/mpeg">
@@ -112,17 +121,14 @@
                         <div id="musicaPreview" style="margin-top: 10px;"></div>
                         <input type="hidden" id="musicaUrl" value="">
                     </div>
-                    
                     <div class="config-item">
                         <label>🎨 Cor de fundo do jogo:</label>
                         <input type="color" id="corFundo" value="#667eea">
                     </div>
-                    
                     <button onclick="salvarConfigQuiz()" class="btn-principal">💾 Salvar Configurações</button>
                 </div>
             </div>
             
-            <!-- Tab 5: Histórico -->
             <div id="tabHistorico" class="tab-content" style="display:none;">
                 <div class="historico-header">
                     <button onclick="carregarHistorico()" class="btn-pequeno">🔄 Atualizar</button>

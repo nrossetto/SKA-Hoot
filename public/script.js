@@ -68,13 +68,25 @@ function conectarServidor() {
         mostrarPergunta(data.pergunta, data.botoes);
     });
     
+    socket.on('atualizar-timer', (tempo) => {
+        const barra = document.getElementById('tempoBar');
+        if (barra) {
+            const total = 15; // Valor padrão, pode ser melhorado
+            const pct = (tempo / total) * 100;
+            barra.style.width = `${pct}%`;
+            if (pct < 30) barra.style.backgroundColor = '#e74c3c';
+            else if (pct < 60) barra.style.backgroundColor = '#f39c12';
+            else barra.style.backgroundColor = '#f1c40f';
+        }
+    });
+    
     socket.on('mostrar-relatorio', (relatorio) => {
-        // Mostrar relatório na tela do jogador
-        const container = document.getElementById('pergunta-container');
+        const container = document.getElementById('perguntaContainer');
         if (container) {
             container.innerHTML = `
                 <div style="background: white; border-radius: 15px; padding: 20px; text-align: center; color: #2c3e50;">
                     <h3>📊 Resultado da Pergunta</h3>
+                    <p style="margin: 10px 0;">Resposta correta: <strong>${relatorio.respostaCorreta}</strong></p>
                     <div style="display: flex; gap: 20px; justify-content: center; margin: 15px 0;">
                         <div style="background: #27ae60; color: white; padding: 15px; border-radius: 10px; min-width: 80px;">
                             <div style="font-size: 2em;">✅</div>
@@ -85,19 +97,17 @@ function conectarServidor() {
                             <div>${relatorio.pctErros}%</div>
                         </div>
                     </div>
-                    <p>Resposta correta: <strong>${relatorio.respostaCorreta}</strong></p>
                     <p style="color: #7f8c8d; font-size: 0.9em;">Aguardando próximo passo...</p>
                 </div>
             `;
         }
-        // Esconder botões de resposta
         document.querySelector('.respostas-grid').style.display = 'none';
     });
     
-    socket.on('mostrar-ranking-parcial', () => {
+    socket.on('mostrar-ranking', () => {
         // Restaurar interface para próxima pergunta
         document.querySelector('.respostas-grid').style.display = 'grid';
-        document.getElementById('pergunta-container').innerHTML = `
+        document.getElementById('perguntaContainer').innerHTML = `
             <div class="tempo-restante">
                 <div class="tempo-bar" id="tempoBar"></div>
             </div>
@@ -147,7 +157,6 @@ function mostrarPergunta(pergunta, botoes) {
     document.getElementById('botaoC').innerHTML = botoes.C || 'C';
     document.getElementById('botaoD').innerHTML = botoes.D || 'D';
     
-    // Mostrar botões
     document.querySelector('.respostas-grid').style.display = 'grid';
     
     if (timerInterval) clearInterval(timerInterval);

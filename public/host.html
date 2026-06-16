@@ -5,36 +5,93 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SKA-HOOT - Painel do Host</title>
     <link rel="stylesheet" href="/style.css">
+    <style>
+        .host-preparacao {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .btn-abrir-apresentador {
+            background: #9b59b6;
+            color: white;
+            padding: 15px 40px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.2em;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.2s;
+            width: 100%;
+            margin-top: 15px;
+        }
+        .btn-abrir-apresentador:hover {
+            transform: scale(1.02);
+        }
+        .sala-criada-box {
+            background: #34495e;
+            padding: 20px;
+            border-radius: 15px;
+            margin-top: 20px;
+            text-align: center;
+            color: white;
+        }
+        .codigo-grande {
+            font-size: 3em;
+            font-weight: bold;
+            background: #27ae60;
+            padding: 15px;
+            border-radius: 12px;
+            letter-spacing: 8px;
+            margin: 15px 0;
+        }
+        .instrucoes {
+            color: #bdc3c7;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+        .btn-copiar {
+            background: #3498db;
+            color: white;
+            padding: 10px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .btn-copiar:hover { background: #2980b9; }
+    </style>
 </head>
 <body class="host-body">
-    <div class="container host-container">
+    <div class="host-preparacao">
+        <!-- Tela de Login -->
         <div id="telaLogin" class="login-container">
             <h1>🔐 SKA-HOOT Host</h1>
             <input type="password" id="senha" placeholder="Senha mestra" class="input-grande">
             <button onclick="verificarSenha()" class="btn-principal">Entrar</button>
         </div>
         
+        <!-- Dashboard -->
         <div id="telaDashboard" style="display:none;">
             <div class="dashboard-header">
-                <h1>🎮 SKA-HOOT 2.0</h1>
-                <div class="header-controls">
-                    <button onclick="logout()" class="btn-icon">🚪 Sair</button>
-                </div>
+                <h1>🎮 SKA-HOOT - Preparação</h1>
+                <button onclick="logout()" class="btn-pequeno">🚪 Sair</button>
             </div>
             
             <div class="tabs">
                 <button class="tab-btn active" onclick="mostrarTab('quizzes')">📚 Meus Quizzes</button>
-                <button class="tab-btn" onclick="mostrarTab('editar')">✏️ Criar/Editar Quiz</button>
-                <button class="tab-btn" onclick="mostrarTab('jogar')">🎯 Iniciar Jogo</button>
+                <button class="tab-btn" onclick="mostrarTab('editar')">✏️ Criar/Editar</button>
+                <button class="tab-btn" onclick="mostrarTab('sala')">🎯 Criar Sala</button>
                 <button class="tab-btn" onclick="mostrarTab('config')">🎨 Personalização</button>
                 <button class="tab-btn" onclick="mostrarTab('historico')">📜 Histórico</button>
             </div>
             
+            <!-- Quizzes -->
             <div id="tabQuizzes" class="tab-content">
                 <div class="quizzes-grid" id="quizzesGrid"></div>
                 <button onclick="criarNovoQuiz()" class="btn-secundario">+ Criar Novo Quiz</button>
             </div>
             
+            <!-- Editor -->
             <div id="tabEditar" class="tab-content" style="display:none;">
                 <div class="editor-header">
                     <select id="quizSelecionado" onchange="carregarQuiz(this.value)">
@@ -47,92 +104,58 @@
                 <button onclick="adicionarPergunta()" class="btn-secundario">+ Adicionar Pergunta</button>
             </div>
             
-            <!-- Tab Jogar -->
-            <div id="tabJogar" class="tab-content" style="display:none;">
-                <div class="jogar-container">
-                    <div class="jogar-config">
-                        <select id="quizJogar" onchange="selecionarQuizJogar(this.value)">
-                            <option value="">-- Selecione um quiz --</option>
-                        </select>
-                        <button onclick="criarSala()" class="btn-principal">🚀 CRIAR SALA</button>
-                    </div>
-                    
-                    <div id="salaInfo" style="display:none; margin-top: 20px;">
-                        <div class="codigo-sala-grande" id="codigoSalaDisplay"></div>
+            <!-- Criar Sala -->
+            <div id="tabSala" class="tab-content" style="display:none;">
+                <div class="jogar-config">
+                    <select id="quizJogar" onchange="selecionarQuizJogar(this.value)">
+                        <option value="">-- Selecione um quiz --</option>
+                    </select>
+                    <button onclick="criarSala()" class="btn-principal" style="width: auto; padding: 12px 40px;">🚀 CRIAR SALA</button>
+                </div>
+                
+                <div id="salaInfo" style="display:none; margin-top: 20px;">
+                    <div class="sala-criada-box">
+                        <h3>✅ Sala criada!</h3>
+                        <div class="codigo-grande" id="codigoDisplay">0000</div>
+                        <button class="btn-copiar" onclick="copiarCodigo()">📋 Copiar código</button>
                         
-                        <!-- Controles principais -->
-                        <div class="controles-jogo" style="display: flex; gap: 15px; justify-content: center; margin: 20px 0; flex-wrap: wrap;">
-                            <button id="btnIniciarJogo" onclick="iniciarJogo()" class="btn-jogo" style="background: #27ae60; color: white; padding: 15px 40px; border: none; border-radius: 10px; font-size: 1.2em; cursor: pointer;">
-                                ▶ INICIAR JOGO
-                            </button>
-                        </div>
+                        <hr style="border-color: #555; margin: 20px 0;">
                         
-                        <!-- Controles avançados (aparecem depois de iniciar) -->
-                        <div id="controlesAvancados" style="display: none; gap: 15px; justify-content: center; margin: 20px 0; flex-wrap: wrap;">
-                            <button id="btnAvancarRelatorio" onclick="avancarRelatorio()" class="btn-jogo" style="background: #f39c12; color: white; padding: 15px 30px; border: none; border-radius: 10px; font-size: 1em; cursor: pointer;">
-                                📊 VER RELATÓRIO
-                            </button>
-                            <button id="btnAvancarRanking" onclick="avancarRanking()" class="btn-jogo" style="background: #9b59b6; color: white; padding: 15px 30px; border: none; border-radius: 10px; font-size: 1em; cursor: pointer;" disabled>
-                                🏆 VER RANKING
-                            </button>
-                            <button id="btnProximaPergunta" onclick="proximaPergunta()" class="btn-jogo" style="background: #3498db; color: white; padding: 15px 30px; border: none; border-radius: 10px; font-size: 1em; cursor: pointer;" disabled>
-                                ⏭ PRÓXIMA PERGUNTA
-                            </button>
-                        </div>
-                        
-                        <!-- Botão Apresentador -->
-                        <div style="margin: 20px 0; text-align: center;">
-                            <button onclick="abrirApresentador()" class="btn-principal" style="background: #9b59b6; width: auto; padding: 15px 40px; font-size: 1.2em;">
-                                🖥️ ABRIR APRESENTADOR
-                            </button>
-                            <p style="color: #ecf0f1; margin-top: 10px; font-size: 0.9em;">
-                                Abre a tela que mostra a pergunta com as alternativas completas
-                            </p>
-                        </div>
-                        
-                        <!-- Espelho da Pergunta (Host vê) -->
-                        <div id="espelhoPergunta" style="background: white; border-radius: 15px; padding: 20px; margin: 20px 0; min-height: 150px; color: #2c3e50;">
-                            <p style="color: #7f8c8d; text-align: center;">Aguardando início do jogo...</p>
-                        </div>
-                        
-                        <!-- Jogadores e Ranking -->
-                        <div id="jogadoresInfo" style="background: #34495e; padding: 15px; border-radius: 10px; margin: 15px 0; color: white;">
-                            <h3>👥 Jogadores na sala: <span id="totalJogadores">0</span></h3>
-                            <div id="listaJogadoresHost"></div>
-                        </div>
-                        
-                        <div id="rankingInfo" style="background: #34495e; padding: 15px; border-radius: 10px; margin: 15px 0; color: white;">
-                            <h3>🏆 Ranking</h3>
-                            <div id="rankingHost"></div>
-                        </div>
-                        
-                        <p style="color: #ecf0f1; text-align: center;">📌 Jogadores acessam: <strong>https://ska-hoot.onrender.com</strong> com o código acima</p>
+                        <button class="btn-abrir-apresentador" onclick="abrirApresentador()">
+                            🖥️ ABRIR APRESENTADOR
+                        </button>
+                        <p class="instrucoes">
+                            O apresentador controla todo o jogo. Os jogadores acessam:<br>
+                            <strong>https://ska-hoot.onrender.com</strong> com o código acima
+                        </p>
                     </div>
                 </div>
             </div>
             
+            <!-- Configurações -->
             <div id="tabConfig" class="tab-content" style="display:none;">
                 <div class="config-panel">
-                    <h3>🎨 Personalização do Quiz</h3>
+                    <h3>🎨 Personalização</h3>
                     <div class="config-item">
-                        <label>🎵 Música de fundo (MP3):</label>
+                        <label>🎵 Música (MP3):</label>
                         <input type="file" id="uploadMusica" accept="audio/mpeg">
                         <button onclick="uploadMusica()" class="btn-pequeno">⬆️ Upload</button>
                         <div id="musicaPreview" style="margin-top: 10px;"></div>
                         <input type="hidden" id="musicaUrl" value="">
                     </div>
                     <div class="config-item">
-                        <label>🎨 Cor de fundo do jogo:</label>
+                        <label>🎨 Cor de fundo:</label>
                         <input type="color" id="corFundo" value="#667eea">
                     </div>
-                    <button onclick="salvarConfigQuiz()" class="btn-principal">💾 Salvar Configurações</button>
+                    <button onclick="salvarConfigQuiz()" class="btn-principal" style="width: auto; padding: 12px 40px;">💾 Salvar Configurações</button>
                 </div>
             </div>
             
+            <!-- Histórico -->
             <div id="tabHistorico" class="tab-content" style="display:none;">
                 <div class="historico-header">
                     <button onclick="carregarHistorico()" class="btn-pequeno">🔄 Atualizar</button>
-                    <button onclick="deletarHistorico()" class="btn-pequeno-danger">🗑️ Deletar todo histórico</button>
+                    <button onclick="deletarHistorico()" class="btn-pequeno-danger">🗑️ Deletar tudo</button>
                 </div>
                 <div id="listaHistorico" class="historico-lista"></div>
             </div>

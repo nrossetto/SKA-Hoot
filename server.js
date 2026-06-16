@@ -16,6 +16,7 @@ const io = socketIo(server, {
 const PORT = process.env.PORT || 3000;
 const SENHA_MESTRA = process.env.SENHA_MESTRA || 'ska2026';
 
+// Configurar armazenamento de arquivos
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, 'public/uploads/');
@@ -26,15 +27,23 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage: storage });
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+});
 
+// Criar pasta de uploads
 if (!fs.existsSync('public/uploads')) {
   fs.mkdirSync('public/uploads', { recursive: true });
 }
 
+// ============ CONEXÃO COM POSTGRESQL ============
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
 });
 
 pool.connect((err, client, release) => {
@@ -46,12 +55,13 @@ pool.connect((err, client, release) => {
   }
 });
 
+// ============ CRIAÇÃO DAS TABELAS ============
 async function initDatabase() {
   const client = await pool.connect();
   try {
-    await client.query(`DROP TABLE IF EXISTS partidas`);
-    await client.query(`DROP TABLE IF EXISTS perguntas`);
-    await client.query(`DROP TABLE IF EXISTS quizzes`);
+    await client.query(`DROP TABLE IF EXISTS partidas CASCADE`);
+    await client.query(`DROP TABLE IF EXISTS perguntas CASCADE`);
+    await client.query(`DROP TABLE IF EXISTS quizzes CASCADE`);
     
     await client.query(`
       CREATE TABLE quizzes (
@@ -92,7 +102,11 @@ async function initDatabase() {
       )
     `);
     
-    console.log('✅ Tabelas criadas com sucesso!');
+    await client.query(`ALTER SEQUENCE quizzes_id_seq RESTART WITH 1`);
+    await client.query(`ALTER SEQUENCE perguntas_id_seq RESTART WITH 1`);
+    await client.query(`ALTER SEQUENCE partidas_id_seq RESTART WITH 1`);
+    
+    console.log('✅ Tabelas criadas!');
   } catch (err) {
     console.error('❌ Erro ao criar tabelas:', err);
   } finally {
@@ -107,9 +121,34 @@ app.use(express.static('public'));
 app.use('/uploads', express.static('public/uploads'));
 
 let salas = {};
+let limpezaAtiva = false;
+
+setInterval(() => {
+  if (limpezaAtiva) return;
+  limpezaAtiva = true;
+  const agora = Date.now();
+  for (const codigo in salas) {
+    const sala = salas[codigo];
+    if (!sala.jogoAtivo && sala.ultimaAtividade && (agora - sala.ultimaAtividade) > 2 * 60 * 60 * 1000) {
+      console.log(`🗑️ Removendo sala inativa: ${codigo}`);
+      delete salas[codigo];
+    }
+    if (!sala.jogoAtivo && !sala.ultimaAtividade && (agora - sala.criadaEm) > 4 * 60 * 60 * 1000) {
+      console.log(`🗑️ Removendo sala sem atividade: ${codigo}`);
+      delete salas[codigo];
+    }
+  }
+  limpezaAtiva = false;
+}, 30 * 60 * 1000);
 
 function gerarCodigo() {
-  return Math.floor(1000 + Math.random() * 9000).toString();
+  let codigo;
+  let tentativas = 0;
+  do {
+    codigo = Math.floor(1000 + Math.random() * 9000).toString();
+    tentativas++;
+  } while (salas[codigo] && tentativas < 20);
+  return codigo;
 }
 
 // ============ API ROTAS ============
@@ -128,12 +167,22 @@ app.post('/api/upload/imagem', upload.single('imagem'), (req, res) => {
   res.json({ sucesso: true, url: `/uploads/${req.file.filename}` });
 });
 
+// ============ QUIZZES ============
+
 app.post('/api/quiz/criar', async (req, res) => {
+  const { nome } = req.body;
+  if (!nome || nome.trim() === '') {
+    return res.json({ sucesso: false, erro: 'Nome do quiz é obrigatório' });
+  }
   try {
-    const result = await pool.query('INSERT INTO quizzes (nome) VALUES ($1) RETURNING id', [req.body.nome]);
+    const result = await pool.query('INSERT INTO quizzes (nome) VALUES ($1) RETURNING id', [nome.trim()]);
     res.json({ sucesso: true, id: result.rows[0].id });
   } catch (err) {
-    res.json({ sucesso: false, erro: err.message });
+    if (err.code === '23505') {
+      res.json({ sucesso: false, erro: 'Já existe um quiz com este nome' });
+    } else {
+      res.json({ sucesso: false, erro: err.message });
+    }
   }
 });
 
@@ -147,12 +196,16 @@ app.get('/api/quiz/listar', async (req, res) => {
 });
 
 app.get('/api/quiz/carregar/:id', async (req, res) => {
+  const quizId = parseInt(req.params.id);
+  if (isNaN(quizId)) {
+    return res.json({ sucesso: false, erro: 'ID inválido' });
+  }
   try {
-    const quizResult = await pool.query('SELECT * FROM quizzes WHERE id = $1', [req.params.id]);
+    const quizResult = await pool.query('SELECT * FROM quizzes WHERE id = $1', [quizId]);
     if (quizResult.rows.length === 0) {
       return res.json({ sucesso: false, erro: 'Quiz não encontrado' });
     }
-    const perguntasResult = await pool.query('SELECT * FROM perguntas WHERE quiz_id = $1 ORDER BY id', [req.params.id]);
+    const perguntasResult = await pool.query('SELECT * FROM perguntas WHERE quiz_id = $1 ORDER BY id', [quizId]);
     res.json({ sucesso: true, quiz: quizResult.rows[0], perguntas: perguntasResult.rows });
   } catch (err) {
     res.json({ sucesso: false, erro: err.message });
@@ -161,14 +214,21 @@ app.get('/api/quiz/carregar/:id', async (req, res) => {
 
 app.post('/api/quiz/salvar', async (req, res) => {
   const { quiz_id, nome, cor_fundo, musica_url, perguntas } = req.body;
+  const quizId = parseInt(quiz_id);
+  if (isNaN(quizId) || !nome || nome.trim() === '') {
+    return res.json({ sucesso: false, erro: 'Dados inválidos' });
+  }
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     await client.query('UPDATE quizzes SET nome = $1, cor_fundo = $2, musica_url = $3 WHERE id = $4',
-      [nome, cor_fundo || '#667eea', musica_url || null, quiz_id]);
-    await client.query('DELETE FROM perguntas WHERE quiz_id = $1', [quiz_id]);
-    
+      [nome.trim(), cor_fundo || '#667eea', musica_url || null, quizId]);
+    await client.query('DELETE FROM perguntas WHERE quiz_id = $1', [quizId]);
     const perguntasData = JSON.parse(perguntas);
+    if (perguntasData.length === 0) {
+      await client.query('ROLLBACK');
+      return res.json({ sucesso: false, erro: 'Quiz deve ter pelo menos uma pergunta' });
+    }
     for (const p of perguntasData) {
       await client.query(`
         INSERT INTO perguntas (
@@ -180,27 +240,26 @@ app.post('/api/quiz/salvar', async (req, res) => {
           correta, tempo
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       `, [
-        quiz_id, 
-        p.texto || '', 
+        quizId,
+        p.texto || '',
         p.imagem_url || null,
-        p.opcao_a || '', 
+        p.opcao_a || '',
         p.opcao_a_botao || '',
-        p.opcao_b || '', 
+        p.opcao_b || '',
         p.opcao_b_botao || '',
-        p.opcao_c || '', 
+        p.opcao_c || '',
         p.opcao_c_botao || '',
-        p.opcao_d || '', 
+        p.opcao_d || '',
         p.opcao_d_botao || '',
-        p.correta || 'A', 
-        p.tempo || 15
+        p.correta || 'A',
+        parseInt(p.tempo) || 15
       ]);
     }
-    
     await client.query('COMMIT');
     res.json({ sucesso: true });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Erro ao salvar:', err);
+    console.error('Erro ao salvar quiz:', err);
     res.json({ sucesso: false, erro: err.message });
   } finally {
     client.release();
@@ -208,29 +267,192 @@ app.post('/api/quiz/salvar', async (req, res) => {
 });
 
 app.delete('/api/quiz/deletar/:id', async (req, res) => {
+  const quizId = parseInt(req.params.id);
+  if (isNaN(quizId)) {
+    return res.json({ sucesso: false, erro: 'ID inválido' });
+  }
   try {
-    await pool.query('DELETE FROM quizzes WHERE id = $1', [req.params.id]);
+    await pool.query('DELETE FROM partidas WHERE quiz_id = $1', [quizId]);
+    await pool.query('DELETE FROM quizzes WHERE id = $1', [quizId]);
     res.json({ sucesso: true });
   } catch (err) {
     res.json({ sucesso: false, erro: err.message });
   }
 });
 
+// ============ EXPORT / IMPORT QUIZ ============
+
+// ROTA DE EXPORT: Baixa o JSON com as perguntas + imagens
+app.get('/api/quiz/export/:id', async (req, res) => {
+  const quizId = parseInt(req.params.id);
+  if (isNaN(quizId)) {
+    return res.status(400).json({ sucesso: false, erro: 'ID inválido' });
+  }
+
+  try {
+    // Buscar dados do quiz
+    const quizResult = await pool.query('SELECT nome FROM quizzes WHERE id = $1', [quizId]);
+    if (quizResult.rows.length === 0) {
+      return res.status(404).json({ sucesso: false, erro: 'Quiz não encontrado' });
+    }
+
+    // Buscar perguntas
+    const perguntasResult = await pool.query(
+      'SELECT * FROM perguntas WHERE quiz_id = $1 ORDER BY id',
+      [quizId]
+    );
+
+    // Montar objeto de exportação (sem cor_fundo, sem musica_url)
+    const exportData = {
+      nome: quizResult.rows[0].nome,
+      perguntas: perguntasResult.rows.map(p => {
+        // Criar cópia sem os campos que não queremos exportar
+        const { id, quiz_id, imagem_url, ...rest } = p;
+        return {
+          ...rest,
+          // Se tiver imagem_url, tentamos ler o arquivo e converter para base64
+          imagem_base64: p.imagem_url ? obterImagemBase64(p.imagem_url) : null,
+          imagem_tipo: p.imagem_url ? obterTipoImagem(p.imagem_url) : null
+        };
+      })
+    };
+
+    // Enviar como download
+    res.setHeader('Content-Disposition', `attachment; filename="${quizResult.rows[0].nome.replace(/[^a-zA-Z0-9]/g, '_')}.json"`);
+    res.setHeader('Content-Type', 'application/json');
+    res.json(exportData);
+  } catch (err) {
+    console.error('Erro ao exportar quiz:', err);
+    res.status(500).json({ sucesso: false, erro: err.message });
+  }
+});
+
+// Função auxiliar: ler imagem do disco e converter para base64
+function obterImagemBase64(imagemUrl) {
+  try {
+    // Exemplo: /uploads/123456-imagem.jpg
+    const caminho = path.join(__dirname, 'public', imagemUrl);
+    if (fs.existsSync(caminho)) {
+      const buffer = fs.readFileSync(caminho);
+      const mimeType = path.extname(caminho).substring(1);
+      return `data:image/${mimeType};base64,${buffer.toString('base64')}`;
+    }
+    return null;
+  } catch (err) {
+    console.error('Erro ao ler imagem:', err);
+    return null;
+  }
+}
+
+function obterTipoImagem(imagemUrl) {
+  const ext = path.extname(imagemUrl).substring(1);
+  return `image/${ext}`;
+}
+
+// ROTA DE IMPORT: Recebe o JSON e cria um novo quiz
+app.post('/api/quiz/import', async (req, res) => {
+  const { nome, perguntas } = req.body;
+
+  if (!nome || nome.trim() === '') {
+    return res.json({ sucesso: false, erro: 'Nome do quiz é obrigatório' });
+  }
+
+  if (!perguntas || !Array.isArray(perguntas) || perguntas.length === 0) {
+    return res.json({ sucesso: false, erro: 'Nenhuma pergunta encontrada' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Criar o quiz com o nome importado
+    const quizResult = await client.query(
+      'INSERT INTO quizzes (nome) VALUES ($1) RETURNING id',
+      [nome.trim()]
+    );
+    const quizId = quizResult.rows[0].id;
+
+    // Inserir perguntas
+    let imagensSalvas = 0;
+    for (const p of perguntas) {
+      let imagemUrl = null;
+
+      // Se a pergunta tem imagem base64, salvar no disco
+      if (p.imagem_base64 && p.imagem_base64.startsWith('data:image')) {
+        const matches = p.imagem_base64.match(/^data:image\/([a-zA-Z]+);base64,(.+)$/);
+        if (matches) {
+          const tipo = matches[1];
+          const base64Data = matches[2];
+          const buffer = Buffer.from(base64Data, 'base64');
+          const filename = `imported-${Date.now()}-${Math.random().toString(36).substring(7)}.${tipo}`;
+          const caminho = path.join(__dirname, 'public/uploads', filename);
+          fs.writeFileSync(caminho, buffer);
+          imagemUrl = `/uploads/${filename}`;
+          imagensSalvas++;
+        }
+      }
+
+      await client.query(`
+        INSERT INTO perguntas (
+          quiz_id, texto, imagem_url,
+          opcao_a, opcao_a_botao,
+          opcao_b, opcao_b_botao,
+          opcao_c, opcao_c_botao,
+          opcao_d, opcao_d_botao,
+          correta, tempo
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      `, [
+        quizId,
+        p.texto || '',
+        imagemUrl,
+        p.opcao_a || '',
+        p.opcao_a_botao || '',
+        p.opcao_b || '',
+        p.opcao_b_botao || '',
+        p.opcao_c || '',
+        p.opcao_c_botao || '',
+        p.opcao_d || '',
+        p.opcao_d_botao || '',
+        p.correta || 'A',
+        parseInt(p.tempo) || 15
+      ]);
+    }
+
+    await client.query('COMMIT');
+    res.json({ 
+      sucesso: true, 
+      id: quizId,
+      mensagem: `Quiz "${nome}" importado com sucesso! (${perguntas.length} perguntas, ${imagensSalvas} imagens)`
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Erro ao importar quiz:', err);
+    res.json({ sucesso: false, erro: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ============ SALAS ============
+
 app.post('/api/sala/criar', async (req, res) => {
   const { quiz_id, quizNome } = req.body;
-  const codigo = gerarCodigo();
+  const quizId = parseInt(quiz_id);
+  if (isNaN(quizId)) {
+    return res.json({ sucesso: false, erro: 'Quiz inválido' });
+  }
   try {
-    const result = await pool.query('SELECT * FROM perguntas WHERE quiz_id = $1 ORDER BY id', [quiz_id]);
+    const result = await pool.query('SELECT * FROM perguntas WHERE quiz_id = $1 ORDER BY id', [quizId]);
     if (result.rows.length === 0) {
       return res.json({ sucesso: false, erro: 'Quiz sem perguntas' });
     }
-    
-    const quizResult = await pool.query('SELECT cor_fundo, musica_url FROM quizzes WHERE id = $1', [quiz_id]);
-    
+    const quizResult = await pool.query('SELECT cor_fundo, musica_url FROM quizzes WHERE id = $1', [quizId]);
+    const codigo = gerarCodigo();
+    const agora = Date.now();
     salas[codigo] = {
       codigo: codigo,
-      quiz_id: quiz_id,
-      quizNome: quizNome,
+      quiz_id: quizId,
+      quizNome: quizNome || 'Quiz',
       jogadores: {},
       perguntas: result.rows,
       perguntaAtual: -1,
@@ -241,10 +463,13 @@ app.post('/api/sala/criar', async (req, res) => {
       tempoRestante: 0,
       timerInterval: null,
       cor_fundo: quizResult.rows[0]?.cor_fundo || '#667eea',
-      musica_url: quizResult.rows[0]?.musica_url || null
+      musica_url: quizResult.rows[0]?.musica_url || null,
+      criadaEm: agora,
+      ultimaAtividade: agora
     };
     res.json({ sucesso: true, codigo: codigo });
   } catch (err) {
+    console.error('Erro ao criar sala:', err);
     res.json({ sucesso: false, erro: err.message });
   }
 });
@@ -258,6 +483,8 @@ app.get('/api/sala/config/:codigo', async (req, res) => {
   }
 });
 
+// ============ HISTÓRICO ============
+
 app.delete('/api/historico/deletar', async (req, res) => {
   try {
     await pool.query('DELETE FROM partidas');
@@ -269,7 +496,7 @@ app.delete('/api/historico/deletar', async (req, res) => {
 
 app.get('/api/historico', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM partidas ORDER BY data_hora DESC LIMIT 50');
+    const result = await pool.query('SELECT * FROM partidas ORDER BY data_hora DESC LIMIT 100');
     res.json({ sucesso: true, historico: result.rows });
   } catch (err) {
     res.json({ sucesso: false, erro: err.message });
@@ -282,63 +509,72 @@ io.on('connection', (socket) => {
 
   socket.on('entrar-sala', (data) => {
     const sala = salas[data.codigo];
-    if (sala && sala.ativo) {
-      const animais = ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐸', '🐒', '🦉', '🐝'];
-      const emoji = animais[Math.floor(Math.random() * animais.length)];
-      const nomeFinal = data.nome || `Jogador${Object.keys(sala.jogadores).length + 1}`;
-      sala.jogadores[socket.id] = {
-        id: socket.id,
-        nome: nomeFinal,
-        emoji: emoji,
-        pontuacao: 0,
-        respostas: []
-      };
-      socket.join(data.codigo);
-      socket.emit('entrada-aceita', {
-        nome: nomeFinal,
-        emoji: emoji,
-        quizNome: sala.quizNome
-      });
-      io.to(data.codigo).emit('atualizar-jogadores', Object.values(sala.jogadores));
-      io.to(`apresentador_${data.codigo}`).emit('atualizar-jogadores', Object.values(sala.jogadores));
-    } else {
+    if (!sala || !sala.ativo) {
       socket.emit('erro', 'Código inválido ou sala inativa');
+      return;
     }
+    sala.ultimaAtividade = Date.now();
+    const animais = ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐸', '🐒', '🦉', '🐝', '🐧', '🐦', '🐤', '🐣'];
+    const emoji = animais[Math.floor(Math.random() * animais.length)];
+    const nomeFinal = data.nome || `Jogador${Object.keys(sala.jogadores).length + 1}`;
+    sala.jogadores[socket.id] = {
+      id: socket.id,
+      nome: nomeFinal,
+      emoji: emoji,
+      pontuacao: 0,
+      respostas: []
+    };
+    socket.join(data.codigo);
+    socket.emit('entrada-aceita', {
+      nome: nomeFinal,
+      emoji: emoji,
+      quizNome: sala.quizNome
+    });
+    io.to(data.codigo).emit('atualizar-jogadores', Object.values(sala.jogadores));
+    io.to(`apresentador_${data.codigo}`).emit('atualizar-jogadores', Object.values(sala.jogadores));
   });
 
   socket.on('apresentador-conectar', (codigo) => {
-    if (salas[codigo]) {
-      socket.join(`apresentador_${codigo}`);
-      socket.emit('apresentador-conectado', { 
-        sucesso: true, 
-        jogadores: Object.values(salas[codigo].jogadores),
-        cor_fundo: salas[codigo].cor_fundo,
-        musica_url: salas[codigo].musica_url
-      });
-      console.log('🎤 Apresentador conectado à sala:', codigo);
-    } else {
+    const sala = salas[codigo];
+    if (!sala) {
       socket.emit('erro', 'Sala não encontrada');
+      return;
     }
+    socket.join(`apresentador_${codigo}`);
+    sala.ultimaAtividade = Date.now();
+    socket.emit('apresentador-conectado', { 
+      sucesso: true, 
+      jogadores: Object.values(sala.jogadores),
+      cor_fundo: sala.cor_fundo,
+      musica_url: sala.musica_url
+    });
+    console.log('🎤 Apresentador conectado à sala:', codigo);
   });
 
   socket.on('apresentador-iniciar', (codigo) => {
     const sala = salas[codigo];
-    if (sala && sala.perguntas.length > 0 && !sala.jogoAtivo) {
-      sala.jogoAtivo = true;
-      sala.perguntaAtual = 0;
-      sala.etapa = 'pergunta';
-      
-      io.to(codigo).emit('jogo-iniciado');
-      io.to(`apresentador_${codigo}`).emit('jogo-iniciado');
-      
-      enviarPergunta(codigo, 0);
+    if (!sala) return;
+    if (sala.perguntas.length === 0) {
+      socket.emit('erro', 'Quiz sem perguntas');
+      return;
     }
+    if (sala.jogoAtivo) {
+      socket.emit('erro', 'Jogo já está ativo');
+      return;
+    }
+    sala.jogoAtivo = true;
+    sala.perguntaAtual = 0;
+    sala.etapa = 'pergunta';
+    sala.ultimaAtividade = Date.now();
+    io.to(codigo).emit('jogo-iniciado');
+    io.to(`apresentador_${codigo}`).emit('jogo-iniciado');
+    enviarPergunta(codigo, 0);
   });
 
   socket.on('apresentador-avancar', (codigo) => {
     const sala = salas[codigo];
     if (!sala || !sala.jogoAtivo) return;
-
+    sala.ultimaAtividade = Date.now();
     if (sala.etapa === 'resultado') {
       sala.etapa = 'ranking';
       enviarRanking(codigo);
@@ -359,11 +595,10 @@ io.on('connection', (socket) => {
     const sala = salas[data.codigo];
     if (!sala || !sala.jogoAtivo) return;
     if (sala.etapa !== 'pergunta') return;
-    
     const pergunta = sala.perguntas[sala.perguntaAtual];
     if (!pergunta) return;
     if (sala.respostasPerguntaAtual[socket.id]) return;
-    
+    sala.ultimaAtividade = Date.now();
     const isCorreta = data.resposta === pergunta.correta;
     let pontos = 0;
     if (isCorreta && data.tempoRestante > 0) {
@@ -372,36 +607,28 @@ io.on('connection', (socket) => {
     if (isCorreta) {
       sala.jogadores[socket.id].pontuacao += pontos;
     }
-    
     sala.respostasPerguntaAtual[socket.id] = {
       resposta: data.resposta,
       correta: isCorreta,
       pontos: pontos
     };
-    
     let respostaCompleta = '';
     if (pergunta.correta === 'A') respostaCompleta = pergunta.opcao_a;
     else if (pergunta.correta === 'B') respostaCompleta = pergunta.opcao_b;
     else if (pergunta.correta === 'C') respostaCompleta = pergunta.opcao_c;
     else if (pergunta.correta === 'D') respostaCompleta = pergunta.opcao_d;
-    
     socket.emit('feedback', {
       correta: isCorreta,
       pontos: pontos,
       respostaCorreta: respostaCompleta
     });
-    
-    // Verificar se todos já responderam
     const totalJogadores = Object.keys(sala.jogadores).length;
     const totalRespostas = Object.keys(sala.respostasPerguntaAtual).length;
     if (totalRespostas === totalJogadores && sala.jogoAtivo && sala.etapa === 'pergunta') {
-      // CANCELAR O TIMER
       if (sala.timerInterval) {
         clearInterval(sala.timerInterval);
         sala.timerInterval = null;
       }
-      
-      // Ir para o resultado após 1.5s
       setTimeout(() => {
         if (sala.jogoAtivo && sala.etapa === 'pergunta') {
           sala.etapa = 'resultado';
@@ -416,36 +643,26 @@ io.on('connection', (socket) => {
   function gerarRelatorio(codigo) {
     const sala = salas[codigo];
     if (!sala) return null;
-    
     const pergunta = sala.perguntas[sala.perguntaAtual];
     const respostas = sala.respostasPerguntaAtual;
     const total = Object.keys(respostas).length;
     const totalJogadores = Object.keys(sala.jogadores).length;
-    
-    let acertos = 0;
-    let erros = 0;
+    let acertos = 0, erros = 0;
     const distribuicao = { A: 0, B: 0, C: 0, D: 0 };
-    
     for (const id in respostas) {
       const r = respostas[id];
-      if (r.correta) {
-        acertos++;
-      } else {
-        erros++;
-      }
+      if (r.correta) acertos++;
+      else erros++;
       distribuicao[r.resposta] = (distribuicao[r.resposta] || 0) + 1;
     }
-    
     const pctAcertos = total > 0 ? Math.round((acertos / total) * 100) : 0;
     const pctErros = total > 0 ? Math.round((erros / total) * 100) : 0;
     const pctNaoResponderam = totalJogadores > 0 ? Math.round(((totalJogadores - total) / totalJogadores) * 100) : 0;
-    
     let respostaCorreta = '';
     if (pergunta.correta === 'A') respostaCorreta = pergunta.opcao_a;
     else if (pergunta.correta === 'B') respostaCorreta = pergunta.opcao_b;
     else if (pergunta.correta === 'C') respostaCorreta = pergunta.opcao_c;
     else if (pergunta.correta === 'D') respostaCorreta = pergunta.opcao_d;
-    
     return {
       pergunta: pergunta.texto,
       respostaCorreta: respostaCorreta,
@@ -469,19 +686,16 @@ io.on('connection', (socket) => {
       finalizarJogo(codigo);
       return;
     }
-    
-    // Limpar timer anterior se existir
     if (sala.timerInterval) {
       clearInterval(sala.timerInterval);
       sala.timerInterval = null;
     }
-    
     const pergunta = sala.perguntas[indice];
     sala.respostasPerguntaAtual = {};
     sala.perguntaAtual = indice;
     sala.etapa = 'pergunta';
     sala.tempoRestante = pergunta.tempo;
-    
+    sala.ultimaAtividade = Date.now();
     const dadosApresentador = {
       pergunta: {
         texto: pergunta.texto,
@@ -503,7 +717,6 @@ io.on('connection', (socket) => {
       numero: indice + 1,
       total: sala.perguntas.length
     };
-    
     const dadosJogador = {
       pergunta: {
         texto: pergunta.texto,
@@ -519,23 +732,18 @@ io.on('connection', (socket) => {
       numero: indice + 1,
       total: sala.perguntas.length
     };
-    
     io.to(codigo).emit('nova-pergunta-jogador', dadosJogador);
     io.to(`apresentador_${codigo}`).emit('nova-pergunta-apresentador', dadosApresentador);
-    
-    // Iniciar timer
     sala.timerInterval = setInterval(() => {
       if (!sala.jogoAtivo || sala.etapa !== 'pergunta') {
         clearInterval(sala.timerInterval);
         sala.timerInterval = null;
         return;
       }
-      
       sala.tempoRestante--;
-      
+      sala.ultimaAtividade = Date.now();
       io.to(codigo).emit('atualizar-timer', sala.tempoRestante);
       io.to(`apresentador_${codigo}`).emit('atualizar-timer', sala.tempoRestante);
-      
       if (sala.tempoRestante <= 0) {
         clearInterval(sala.timerInterval);
         sala.timerInterval = null;
@@ -557,17 +765,16 @@ io.on('connection', (socket) => {
       .map((j, i) => ({ posicao: i + 1, nome: j.nome, pontuacao: j.pontuacao, emoji: j.emoji }));
     io.to(codigo).emit('atualizar-ranking', ranking);
     io.to(`apresentador_${codigo}`).emit('atualizar-ranking', ranking);
+    sala.ultimaAtividade = Date.now();
   }
 
   async function finalizarJogo(codigo) {
     const sala = salas[codigo];
     if (!sala) return;
-    
     if (sala.timerInterval) {
       clearInterval(sala.timerInterval);
       sala.timerInterval = null;
     }
-    
     const ranking = Object.values(sala.jogadores).sort((a, b) => b.pontuacao - a.pontuacao);
     try {
       await pool.query('INSERT INTO partidas (quiz_id, codigo, ranking) VALUES ($1, $2, $3)',
@@ -575,20 +782,21 @@ io.on('connection', (socket) => {
     } catch (err) {
       console.error('Erro ao salvar partida:', err);
     }
-    
     sala.jogoAtivo = false;
     sala.etapa = 'podio';
-    
+    sala.ultimaAtividade = Date.now();
     io.to(codigo).emit('fim-jogo', { ranking: ranking });
     io.to(`apresentador_${codigo}`).emit('fim-jogo', { ranking: ranking });
   }
 
   socket.on('disconnect', () => {
     for (let codigo in salas) {
-      if (salas[codigo].jogadores[socket.id]) {
-        delete salas[codigo].jogadores[socket.id];
-        io.to(codigo).emit('atualizar-jogadores', Object.values(salas[codigo].jogadores));
-        io.to(`apresentador_${codigo}`).emit('atualizar-jogadores', Object.values(salas[codigo].jogadores));
+      const sala = salas[codigo];
+      if (sala && sala.jogadores[socket.id]) {
+        delete sala.jogadores[socket.id];
+        sala.ultimaAtividade = Date.now();
+        io.to(codigo).emit('atualizar-jogadores', Object.values(sala.jogadores));
+        io.to(`apresentador_${codigo}`).emit('atualizar-jogadores', Object.values(sala.jogadores));
         break;
       }
     }
@@ -611,11 +819,10 @@ app.get('*', (req, res) => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`
   ╔═══════════════════════════════════════╗
-  ║     🎮 SKA-HOOT CORRIGIDO! 🎮         ║
+  ║     🎮 SKA-HOOT COM EXPORT/IMPORT    ║
   ╠═══════════════════════════════════════╣
   ║  Acesse: http://localhost:${PORT}      ║
   ║  Host: http://localhost:${PORT}/host   ║
-  ║  Apresentador: http://localhost:${PORT}/apresentador ║
   ║  Senha: ${SENHA_MESTRA}                ║
   ╚═══════════════════════════════════════╝
   `);

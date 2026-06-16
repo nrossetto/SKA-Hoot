@@ -59,6 +59,60 @@
             font-weight: bold;
         }
         .btn-copiar:hover { background: #2980b9; }
+        
+        /* Botões de Export/Import */
+        .btn-export {
+            background: #27ae60;
+            color: white;
+            padding: 6px 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85em;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        .btn-export:hover { background: #2ecc71; }
+        
+        .btn-import {
+            background: #f39c12;
+            color: white;
+            padding: 10px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+            margin-bottom: 15px;
+        }
+        .btn-import:hover { background: #e67e22; }
+        
+        .import-area {
+            background: #34495e;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .import-area input[type="file"] {
+            color: white;
+            padding: 8px;
+            flex: 1;
+            min-width: 200px;
+        }
+        .import-area label {
+            color: #ecf0f1;
+        }
+        
+        .quiz-card-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body class="host-body">
@@ -87,6 +141,13 @@
             
             <!-- Quizzes -->
             <div id="tabQuizzes" class="tab-content">
+                <!-- Área de Import -->
+                <div class="import-area">
+                    <label>📤 Importar Quiz:</label>
+                    <input type="file" id="fileImport" accept=".json">
+                    <button onclick="importarQuiz()" class="btn-import">📥 Importar</button>
+                </div>
+                
                 <div class="quizzes-grid" id="quizzesGrid"></div>
                 <button onclick="criarNovoQuiz()" class="btn-secundario">+ Criar Novo Quiz</button>
             </div>

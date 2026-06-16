@@ -8,6 +8,7 @@
 </head>
 <body class="player-body" id="playerBody">
     <div class="container player-container">
+        <!-- Entrada -->
         <div id="telaEntrada" class="tela-entrada">
             <div class="logo-area" id="logoArea">
                 <h1>🎮 SKA-HOOT</h1>
@@ -19,6 +20,7 @@
             </div>
         </div>
         
+        <!-- Sala de Espera -->
         <div id="telaAguardando" style="display:none;">
             <div class="sala-espera">
                 <div class="quiz-info"><h2 id="quizNome"></h2></div>
@@ -33,6 +35,7 @@
             </div>
         </div>
         
+        <!-- Jogo -->
         <div id="telaJogo" style="display:none;">
             <div class="game-header">
                 <div class="pontuacao-header">⭐ <span id="pontuacaoAtual">0</span></div>
@@ -40,7 +43,7 @@
                 <div class="ranking-btn" onclick="mostrarRanking()">🏆</div>
             </div>
             
-            <div class="pergunta-container">
+            <div class="pergunta-container" id="perguntaContainer">
                 <div class="tempo-restante">
                     <div class="tempo-bar" id="tempoBar"></div>
                 </div>
@@ -48,26 +51,27 @@
                 <h2 id="textoPergunta" class="texto-pergunta"></h2>
             </div>
             
-            <div class="respostas-grid">
+            <div class="respostas-grid" id="respostasGrid">
                 <button class="resposta-btn resposta-a" data-resposta="A">
                     <div class="simbolo">★</div>
-                    <div class="texto-botao" id="botaoA"></div>
+                    <div class="texto-botao" id="botaoA">A</div>
                 </button>
                 <button class="resposta-btn resposta-b" data-resposta="B">
                     <div class="simbolo">▲</div>
-                    <div class="texto-botao" id="botaoB"></div>
+                    <div class="texto-botao" id="botaoB">B</div>
                 </button>
                 <button class="resposta-btn resposta-c" data-resposta="C">
                     <div class="simbolo">●</div>
-                    <div class="texto-botao" id="botaoC"></div>
+                    <div class="texto-botao" id="botaoC">C</div>
                 </button>
                 <button class="resposta-btn resposta-d" data-resposta="D">
                     <div class="simbolo">■</div>
-                    <div class="texto-botao" id="botaoD"></div>
+                    <div class="texto-botao" id="botaoD">D</div>
                 </button>
             </div>
         </div>
         
+        <!-- Feedback -->
         <div id="telaFeedback" style="display:none;" class="feedback-overlay">
             <div class="feedback-content">
                 <div id="feedbackIcon" class="feedback-icon"></div>
@@ -76,6 +80,7 @@
             </div>
         </div>
         
+        <!-- Pódio -->
         <div id="telaPodio" style="display:none;" class="podio-overlay">
             <div class="podio-container">
                 <div id="podioContent" class="podio-content"></div>
@@ -83,6 +88,7 @@
             </div>
         </div>
         
+        <!-- Ranking -->
         <div id="telaRanking" style="display:none;" class="modal">
             <div class="modal-content">
                 <span class="close" onclick="fecharRanking()">&times;</span>

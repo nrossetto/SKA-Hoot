@@ -70,8 +70,18 @@
                     <div id="salaInfo" class="sala-info-box" style="display:none;">
                         <div class="codigo-sala-grande" id="codigoSalaDisplay"></div>
                         <div class="link-controle" id="linkControleDisplay"></div>
-                        <p>📌 Abra o link acima em uma nova aba para controlar o jogo!</p>
-                        <p>🎵 A música de fundo tocará apenas na página de controle.</p>
+                        
+                        <!-- BOTÃO DO APRESENTADOR -->
+                        <div style="margin: 20px 0; text-align: center;">
+                            <button onclick="abrirApresentador()" class="btn-principal" style="background: #9b59b6; width: auto; padding: 15px 40px; font-size: 1.2em;">
+                                🖥️ ABRIR APRESENTADOR
+                            </button>
+                            <p style="color: #ecf0f1; margin-top: 10px; font-size: 0.9em;">
+                                Abre a tela que mostra a pergunta com as alternativas completas
+                            </p>
+                        </div>
+                        
+                        <p style="color: #ecf0f1; text-align: center;">📌 Os jogadores acessam: <strong>https://ska-hoot.onrender.com</strong> com o código acima</p>
                     </div>
                 </div>
             </div>
@@ -82,11 +92,9 @@
                     <h3>🎨 Personalização do Quiz</h3>
                     
                     <div class="config-item">
-                        <label>🎵 Música de fundo (MP3):</label>
-                        <input type="file" id="uploadMusica" accept="audio/mpeg">
-                        <button onclick="uploadMusica()" class="btn-pequeno">⬆️ Upload</button>
-                        <div id="musicaPreview" class="preview-musica" style="margin-top: 10px;"></div>
-                        <input type="hidden" id="musicaUrl" value="">
+                        <label>🎵 Música de fundo (URL MP3):</label>
+                        <input type="text" id="musicaUrl" placeholder="https://exemplo.com/musica.mp3" class="input-grande">
+                        <button onclick="testarMusica()" class="btn-pequeno">▶️ Testar</button>
                     </div>
                     
                     <div class="config-item">
@@ -97,11 +105,8 @@
                     <div class="config-item">
                         <label>🖼️ Logo do jogo:</label>
                         <input type="file" id="uploadLogo" accept="image/*">
-                        <button onclick="uploadLogo()" class="btn-pequeno">⬆️ Upload</button>
                         <div id="previewLogo"></div>
-                        <input type="hidden" id="logoUrl" value="">
                     </div>
-                    
                     <button onclick="salvarConfigQuiz()" class="btn-principal">💾 Salvar Configurações</button>
                 </div>
             </div>

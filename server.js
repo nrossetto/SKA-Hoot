@@ -224,6 +224,10 @@ app.post('/api/sala/criar', async (req, res) => {
     if (result.rows.length === 0) {
       return res.json({ sucesso: false, erro: 'Quiz sem perguntas' });
     }
+    
+    // Buscar configurações visuais do quiz
+    const quizResult = await pool.query('SELECT cor_fundo, musica_url FROM quizzes WHERE id = $1', [quiz_id]);
+    
     salas[codigo] = {
       codigo: codigo,
       quiz_id: quiz_id,
@@ -233,9 +237,12 @@ app.post('/api/sala/criar', async (req, res) => {
       perguntaAtual: -1,
       ativo: true,
       jogoAtivo: false,
-      pausado: false,
       respostasPerguntaAtual: {},
-      etapa: 'aguardando'
+      etapa: 'aguardando', // aguardando | pergunta | resultado | ranking | podio
+      tempoRestante: 0,
+      timerInterval: null,
+      cor_fundo: quizResult.rows[0]?.cor_fundo || '#667eea',
+      musica_url: quizResult.rows[0]?.musica_url || null
     };
     res.json({ sucesso: true, codigo: codigo });
   } catch (err) {
@@ -246,12 +253,7 @@ app.post('/api/sala/criar', async (req, res) => {
 app.get('/api/sala/config/:codigo', async (req, res) => {
   const sala = salas[req.params.codigo];
   if (sala) {
-    try {
-      const result = await pool.query('SELECT cor_fundo FROM quizzes WHERE id = $1', [sala.quiz_id]);
-      res.json({ sucesso: true, cor_fundo: result.rows[0]?.cor_fundo || '#667eea' });
-    } catch (err) {
-      res.json({ sucesso: false, erro: err.message });
-    }
+    res.json({ sucesso: true, cor_fundo: sala.cor_fundo || '#667eea' });
   } else {
     res.json({ sucesso: false });
   }
@@ -299,110 +301,72 @@ io.on('connection', (socket) => {
         quizNome: sala.quizNome
       });
       io.to(data.codigo).emit('atualizar-jogadores', Object.values(sala.jogadores));
+      
+      // Se o apresentador já estiver conectado, enviar atualização
+      io.to(`apresentador_${data.codigo}`).emit('atualizar-jogadores', Object.values(sala.jogadores));
     } else {
       socket.emit('erro', 'Código inválido ou sala inativa');
     }
   });
 
-  socket.on('host-conectar', (codigo) => {
+  // Apresentador conecta
+  socket.on('apresentador-conectar', (codigo) => {
     if (salas[codigo]) {
-      socket.join(`host_${codigo}`);
-      socket.emit('host-entrada-aceita', { sucesso: true });
-      socket.emit('atualizar-jogadores', Object.values(salas[codigo].jogadores));
-      enviarRanking(codigo);
+      socket.join(`apresentador_${codigo}`);
+      socket.emit('apresentador-conectado', { 
+        sucesso: true, 
+        jogadores: Object.values(salas[codigo].jogadores),
+        cor_fundo: salas[codigo].cor_fundo,
+        musica_url: salas[codigo].musica_url
+      });
+      console.log('🎤 Apresentador conectado à sala:', codigo);
+    } else {
+      socket.emit('erro', 'Sala não encontrada');
     }
   });
 
-  socket.on('iniciar-jogo', (codigo) => {
-    if (salas[codigo] && salas[codigo].perguntas.length > 0) {
-      salas[codigo].jogoAtivo = true;
-      salas[codigo].perguntaAtual = 0;
-      salas[codigo].etapa = 'pergunta';
+  // Apresentador inicia o jogo
+  socket.on('apresentador-iniciar', (codigo) => {
+    const sala = salas[codigo];
+    if (sala && sala.perguntas.length > 0 && !sala.jogoAtivo) {
+      sala.jogoAtivo = true;
+      sala.perguntaAtual = 0;
+      sala.etapa = 'pergunta';
+      
+      // Notificar todos que o jogo começou
       io.to(codigo).emit('jogo-iniciado');
+      io.to(`apresentador_${codigo}`).emit('jogo-iniciado');
+      
+      // Enviar a primeira pergunta
       enviarPergunta(codigo, 0);
     }
   });
 
-  // NOVO: Host avança para o relatório
-  socket.on('avancar-relatorio', (codigo) => {
+  // Apresentador avança (Resultado → Ranking → Próxima Pergunta)
+  socket.on('apresentador-avancar', (codigo) => {
     const sala = salas[codigo];
-    if (sala && sala.jogoAtivo) {
-      sala.etapa = 'relatorio';
-      const relatorio = gerarRelatorio(codigo);
-      io.to(codigo).emit('mostrar-relatorio', relatorio);
-      io.to(`host_${codigo}`).emit('mostrar-relatorio', relatorio);
-    }
-  });
+    if (!sala || !sala.jogoAtivo) return;
 
-  // NOVO: Host avança para o ranking
-  socket.on('avancar-ranking', (codigo) => {
-    const sala = salas[codigo];
-    if (sala && sala.jogoAtivo) {
+    if (sala.etapa === 'resultado') {
+      // Avança para o ranking
       sala.etapa = 'ranking';
       enviarRanking(codigo);
-      io.to(codigo).emit('mostrar-ranking-parcial');
-      io.to(`host_${codigo}`).emit('mostrar-ranking-parcial');
-    }
-  });
-
-  // NOVO: Host avança para a próxima pergunta
-  socket.on('avancar-proxima-pergunta', (codigo) => {
-    const sala = salas[codigo];
-    if (sala && sala.jogoAtivo) {
+      io.to(codigo).emit('mostrar-ranking');
+      io.to(`apresentador_${codigo}`).emit('mostrar-ranking');
+    } else if (sala.etapa === 'ranking') {
+      // Avança para a próxima pergunta
       const proximoIndice = sala.perguntaAtual + 1;
       if (proximoIndice < sala.perguntas.length) {
         sala.etapa = 'pergunta';
         enviarPergunta(codigo, proximoIndice);
       } else {
+        // Fim do jogo
         finalizarJogo(codigo);
       }
     }
   });
 
-  // Função para gerar relatório da pergunta
-  function gerarRelatorio(codigo) {
-    const sala = salas[codigo];
-    if (!sala) return null;
-    
-    const pergunta = sala.perguntas[sala.perguntaAtual];
-    const respostas = sala.respostasPerguntaAtual;
-    const total = Object.keys(respostas).length;
-    const totalJogadores = Object.keys(sala.jogadores).length;
-    
-    let acertos = 0;
-    let erros = 0;
-    const distribuicao = { A: 0, B: 0, C: 0, D: 0 };
-    
-    for (const id in respostas) {
-      const r = respostas[id];
-      if (r.correta) {
-        acertos++;
-      } else {
-        erros++;
-      }
-      distribuicao[r.resposta] = (distribuicao[r.resposta] || 0) + 1;
-    }
-    
-    // Calcular porcentagens
-    const pctAcertos = total > 0 ? Math.round((acertos / total) * 100) : 0;
-    const pctErros = total > 0 ? Math.round((erros / total) * 100) : 0;
-    const pctNaoResponderam = totalJogadores > 0 ? Math.round(((totalJogadores - total) / totalJogadores) * 100) : 0;
-    
-    return {
-      pergunta: pergunta.texto,
-      respostaCorreta: pergunta[`opcao_${pergunta.correta.toLowerCase()}`],
-      opcaoCorreta: pergunta.correta,
-      totalResponderam: total,
-      totalJogadores: totalJogadores,
-      acertos: acertos,
-      erros: erros,
-      pctAcertos: pctAcertos,
-      pctErros: pctErros,
-      pctNaoResponderam: pctNaoResponderam,
-      distribuicao: distribuicao
-    };
-  }
-
+  // Jogador responde
   socket.on('responder', (data) => {
     const sala = salas[data.codigo];
     if (!sala || !sala.jogoAtivo) return;
@@ -442,19 +406,72 @@ io.on('connection', (socket) => {
     // Verificar se todos já responderam
     const totalJogadores = Object.keys(sala.jogadores).length;
     const totalRespostas = Object.keys(sala.respostasPerguntaAtual).length;
-    if (totalRespostas === totalJogadores) {
-      // Todos responderam, vai para o relatório automaticamente após 2 segundos
+    if (totalRespostas === totalJogadores && sala.jogoAtivo && sala.etapa === 'pergunta') {
+      // Todos responderam, vamos para o resultado
+      if (sala.timerInterval) clearInterval(sala.timerInterval);
       setTimeout(() => {
-        if (sala.jogoAtivo) {
-          sala.etapa = 'relatorio';
-          const relatorio = gerarRelatorio(data.codigo);
-          io.to(data.codigo).emit('mostrar-relatorio', relatorio);
-          io.to(`host_${data.codigo}`).emit('mostrar-relatorio', relatorio);
+        if (sala.jogoAtivo && sala.etapa === 'pergunta') {
+          sala.etapa = 'resultado';
+          const relatorio = gerarRelatorio(codigo);
+          io.to(codigo).emit('mostrar-relatorio', relatorio);
+          io.to(`apresentador_${codigo}`).emit('mostrar-relatorio', relatorio);
         }
-      }, 2000);
+      }, 1500);
     }
   });
-  
+
+  // Função para gerar relatório
+  function gerarRelatorio(codigo) {
+    const sala = salas[codigo];
+    if (!sala) return null;
+    
+    const pergunta = sala.perguntas[sala.perguntaAtual];
+    const respostas = sala.respostasPerguntaAtual;
+    const total = Object.keys(respostas).length;
+    const totalJogadores = Object.keys(sala.jogadores).length;
+    
+    let acertos = 0;
+    let erros = 0;
+    const distribuicao = { A: 0, B: 0, C: 0, D: 0 };
+    
+    for (const id in respostas) {
+      const r = respostas[id];
+      if (r.correta) {
+        acertos++;
+      } else {
+        erros++;
+      }
+      distribuicao[r.resposta] = (distribuicao[r.resposta] || 0) + 1;
+    }
+    
+    const pctAcertos = total > 0 ? Math.round((acertos / total) * 100) : 0;
+    const pctErros = total > 0 ? Math.round((erros / total) * 100) : 0;
+    const pctNaoResponderam = totalJogadores > 0 ? Math.round(((totalJogadores - total) / totalJogadores) * 100) : 0;
+    
+    let respostaCorreta = '';
+    if (pergunta.correta === 'A') respostaCorreta = pergunta.opcao_a;
+    else if (pergunta.correta === 'B') respostaCorreta = pergunta.opcao_b;
+    else if (pergunta.correta === 'C') respostaCorreta = pergunta.opcao_c;
+    else if (pergunta.correta === 'D') respostaCorreta = pergunta.opcao_d;
+    
+    return {
+      pergunta: pergunta.texto,
+      respostaCorreta: respostaCorreta,
+      opcaoCorreta: pergunta.correta,
+      totalResponderam: total,
+      totalJogadores: totalJogadores,
+      acertos: acertos,
+      erros: erros,
+      pctAcertos: pctAcertos,
+      pctErros: pctErros,
+      pctNaoResponderam: pctNaoResponderam,
+      distribuicao: distribuicao,
+      numero: sala.perguntaAtual + 1,
+      total: sala.perguntas.length
+    };
+  }
+
+  // Função para enviar pergunta
   function enviarPergunta(codigo, indice) {
     const sala = salas[codigo];
     if (!sala || indice >= sala.perguntas.length) {
@@ -466,8 +483,9 @@ io.on('connection', (socket) => {
     sala.respostasPerguntaAtual = {};
     sala.perguntaAtual = indice;
     sala.etapa = 'pergunta';
+    sala.tempoRestante = pergunta.tempo;
     
-    const dadosHost = {
+    const dadosApresentador = {
       pergunta: {
         texto: pergunta.texto,
         imagem_url: pergunta.imagem_url,
@@ -506,25 +524,36 @@ io.on('connection', (socket) => {
     };
     
     io.to(codigo).emit('nova-pergunta-jogador', dadosJogador);
-    io.to(`host_${codigo}`).emit('nova-pergunta-host', dadosHost);
+    io.to(`apresentador_${codigo}`).emit('nova-pergunta-apresentador', dadosApresentador);
     
     // Timer automático
-    sala.tempoRestante = pergunta.tempo;
+    if (sala.timerInterval) clearInterval(sala.timerInterval);
     sala.timerInterval = setInterval(() => {
+      if (!sala.jogoAtivo || sala.etapa !== 'pergunta') {
+        clearInterval(sala.timerInterval);
+        return;
+      }
+      
       sala.tempoRestante--;
+      
+      // Enviar atualização do timer para apresentador e jogadores
+      io.to(codigo).emit('atualizar-timer', sala.tempoRestante);
+      io.to(`apresentador_${codigo}`).emit('atualizar-timer', sala.tempoRestante);
+      
       if (sala.tempoRestante <= 0) {
         clearInterval(sala.timerInterval);
         if (sala.jogoAtivo && sala.etapa === 'pergunta') {
-          // Tempo esgotado, vai para o relatório
-          sala.etapa = 'relatorio';
+          // Tempo acabou, vai para o resultado
+          sala.etapa = 'resultado';
           const relatorio = gerarRelatorio(codigo);
           io.to(codigo).emit('mostrar-relatorio', relatorio);
-          io.to(`host_${codigo}`).emit('mostrar-relatorio', relatorio);
+          io.to(`apresentador_${codigo}`).emit('mostrar-relatorio', relatorio);
         }
       }
     }, 1000);
   }
-  
+
+  // Função para enviar ranking
   function enviarRanking(codigo) {
     const sala = salas[codigo];
     if (!sala) return;
@@ -532,9 +561,10 @@ io.on('connection', (socket) => {
       .sort((a, b) => b.pontuacao - a.pontuacao)
       .map((j, i) => ({ posicao: i + 1, nome: j.nome, pontuacao: j.pontuacao, emoji: j.emoji }));
     io.to(codigo).emit('atualizar-ranking', ranking);
-    io.to(`host_${codigo}`).emit('atualizar-ranking', ranking);
+    io.to(`apresentador_${codigo}`).emit('atualizar-ranking', ranking);
   }
-  
+
+  // Função para finalizar jogo
   async function finalizarJogo(codigo) {
     const sala = salas[codigo];
     if (!sala) return;
@@ -549,18 +579,19 @@ io.on('connection', (socket) => {
       console.error('Erro ao salvar partida:', err);
     }
     
-    io.to(codigo).emit('fim-jogo', { ranking: ranking });
-    io.to(`host_${codigo}`).emit('fim-jogo', { ranking: ranking });
     sala.jogoAtivo = false;
+    sala.etapa = 'podio';
+    
+    io.to(codigo).emit('fim-jogo', { ranking: ranking });
+    io.to(`apresentador_${codigo}`).emit('fim-jogo', { ranking: ranking });
   }
-  
+
   socket.on('disconnect', () => {
     for (let codigo in salas) {
       if (salas[codigo].jogadores[socket.id]) {
         delete salas[codigo].jogadores[socket.id];
         io.to(codigo).emit('atualizar-jogadores', Object.values(salas[codigo].jogadores));
-        io.to(`host_${codigo}`).emit('atualizar-jogadores', Object.values(salas[codigo].jogadores));
-        enviarRanking(codigo);
+        io.to(`apresentador_${codigo}`).emit('atualizar-jogadores', Object.values(salas[codigo].jogadores));
         break;
       }
     }
@@ -587,6 +618,7 @@ server.listen(PORT, '0.0.0.0', () => {
   ╠═══════════════════════════════════════╣
   ║  Acesse: http://localhost:${PORT}      ║
   ║  Host: http://localhost:${PORT}/host   ║
+  ║  Apresentador: http://localhost:${PORT}/apresentador ║
   ║  Senha: ${SENHA_MESTRA}                ║
   ╚═══════════════════════════════════════╝
   `);

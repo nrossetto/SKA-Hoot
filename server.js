@@ -16,7 +16,6 @@ const io = socketIo(server, {
 const PORT = process.env.PORT || 3000;
 const SENHA_MESTRA = process.env.SENHA_MESTRA || 'ska2026';
 
-// Configurar armazenamento de arquivos
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, 'public/uploads/');
@@ -29,12 +28,10 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-// Criar pasta de uploads
 if (!fs.existsSync('public/uploads')) {
   fs.mkdirSync('public/uploads', { recursive: true });
 }
 
-// ============ CONEXÃO COM POSTGRESQL ============
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
@@ -49,7 +46,6 @@ pool.connect((err, client, release) => {
   }
 });
 
-// ============ CRIAÇÃO DAS TABELAS ============
 async function initDatabase() {
   const client = await pool.connect();
   try {
@@ -57,7 +53,6 @@ async function initDatabase() {
     await client.query(`DROP TABLE IF EXISTS perguntas`);
     await client.query(`DROP TABLE IF EXISTS quizzes`);
     
-    // Tabela quizzes com campo para música (URL do arquivo)
     await client.query(`
       CREATE TABLE quizzes (
         id SERIAL PRIMARY KEY,
@@ -68,7 +63,6 @@ async function initDatabase() {
       )
     `);
     
-    // Tabela perguntas com opcao_a_botao, opcao_b_botao, etc.
     await client.query(`
       CREATE TABLE perguntas (
         id SERIAL PRIMARY KEY,
@@ -108,12 +102,10 @@ async function initDatabase() {
 
 initDatabase();
 
-// Middleware
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
 app.use('/uploads', express.static('public/uploads'));
 
-// Estado do jogo em memória
 let salas = {};
 
 function gerarCodigo() {
@@ -126,13 +118,11 @@ app.post('/api/verificar-senha', (req, res) => {
   res.json({ sucesso: req.body.senha === SENHA_MESTRA });
 });
 
-// Upload de música (MP3)
 app.post('/api/upload/musica', upload.single('musica'), (req, res) => {
   if (!req.file) return res.json({ sucesso: false, erro: 'Nenhum arquivo' });
   res.json({ sucesso: true, url: `/uploads/${req.file.filename}` });
 });
 
-// Upload de imagem
 app.post('/api/upload/imagem', upload.single('imagem'), (req, res) => {
   if (!req.file) return res.json({ sucesso: false, erro: 'Nenhum arquivo' });
   res.json({ sucesso: true, url: `/uploads/${req.file.filename}` });
@@ -244,7 +234,8 @@ app.post('/api/sala/criar', async (req, res) => {
       ativo: true,
       jogoAtivo: false,
       pausado: false,
-      respostasPerguntaAtual: {}
+      respostasPerguntaAtual: {},
+      etapa: 'aguardando'
     };
     res.json({ sucesso: true, codigo: codigo });
   } catch (err) {
@@ -326,14 +317,97 @@ io.on('connection', (socket) => {
     if (salas[codigo] && salas[codigo].perguntas.length > 0) {
       salas[codigo].jogoAtivo = true;
       salas[codigo].perguntaAtual = 0;
+      salas[codigo].etapa = 'pergunta';
       io.to(codigo).emit('jogo-iniciado');
       enviarPergunta(codigo, 0);
     }
   });
 
+  // NOVO: Host avança para o relatório
+  socket.on('avancar-relatorio', (codigo) => {
+    const sala = salas[codigo];
+    if (sala && sala.jogoAtivo) {
+      sala.etapa = 'relatorio';
+      const relatorio = gerarRelatorio(codigo);
+      io.to(codigo).emit('mostrar-relatorio', relatorio);
+      io.to(`host_${codigo}`).emit('mostrar-relatorio', relatorio);
+    }
+  });
+
+  // NOVO: Host avança para o ranking
+  socket.on('avancar-ranking', (codigo) => {
+    const sala = salas[codigo];
+    if (sala && sala.jogoAtivo) {
+      sala.etapa = 'ranking';
+      enviarRanking(codigo);
+      io.to(codigo).emit('mostrar-ranking-parcial');
+      io.to(`host_${codigo}`).emit('mostrar-ranking-parcial');
+    }
+  });
+
+  // NOVO: Host avança para a próxima pergunta
+  socket.on('avancar-proxima-pergunta', (codigo) => {
+    const sala = salas[codigo];
+    if (sala && sala.jogoAtivo) {
+      const proximoIndice = sala.perguntaAtual + 1;
+      if (proximoIndice < sala.perguntas.length) {
+        sala.etapa = 'pergunta';
+        enviarPergunta(codigo, proximoIndice);
+      } else {
+        finalizarJogo(codigo);
+      }
+    }
+  });
+
+  // Função para gerar relatório da pergunta
+  function gerarRelatorio(codigo) {
+    const sala = salas[codigo];
+    if (!sala) return null;
+    
+    const pergunta = sala.perguntas[sala.perguntaAtual];
+    const respostas = sala.respostasPerguntaAtual;
+    const total = Object.keys(respostas).length;
+    const totalJogadores = Object.keys(sala.jogadores).length;
+    
+    let acertos = 0;
+    let erros = 0;
+    const distribuicao = { A: 0, B: 0, C: 0, D: 0 };
+    
+    for (const id in respostas) {
+      const r = respostas[id];
+      if (r.correta) {
+        acertos++;
+      } else {
+        erros++;
+      }
+      distribuicao[r.resposta] = (distribuicao[r.resposta] || 0) + 1;
+    }
+    
+    // Calcular porcentagens
+    const pctAcertos = total > 0 ? Math.round((acertos / total) * 100) : 0;
+    const pctErros = total > 0 ? Math.round((erros / total) * 100) : 0;
+    const pctNaoResponderam = totalJogadores > 0 ? Math.round(((totalJogadores - total) / totalJogadores) * 100) : 0;
+    
+    return {
+      pergunta: pergunta.texto,
+      respostaCorreta: pergunta[`opcao_${pergunta.correta.toLowerCase()}`],
+      opcaoCorreta: pergunta.correta,
+      totalResponderam: total,
+      totalJogadores: totalJogadores,
+      acertos: acertos,
+      erros: erros,
+      pctAcertos: pctAcertos,
+      pctErros: pctErros,
+      pctNaoResponderam: pctNaoResponderam,
+      distribuicao: distribuicao
+    };
+  }
+
   socket.on('responder', (data) => {
     const sala = salas[data.codigo];
     if (!sala || !sala.jogoAtivo) return;
+    if (sala.etapa !== 'pergunta') return;
+    
     const pergunta = sala.perguntas[sala.perguntaAtual];
     if (!pergunta) return;
     if (sala.respostasPerguntaAtual[socket.id]) return;
@@ -365,17 +439,20 @@ io.on('connection', (socket) => {
       respostaCorreta: respostaCompleta
     });
     
-    enviarRanking(data.codigo);
-    
-    const totalRespostas = Object.keys(sala.respostasPerguntaAtual).length;
+    // Verificar se todos já responderam
     const totalJogadores = Object.keys(sala.jogadores).length;
+    const totalRespostas = Object.keys(sala.respostasPerguntaAtual).length;
     if (totalRespostas === totalJogadores) {
-      proximaPergunta(data.codigo);
+      // Todos responderam, vai para o relatório automaticamente após 2 segundos
+      setTimeout(() => {
+        if (sala.jogoAtivo) {
+          sala.etapa = 'relatorio';
+          const relatorio = gerarRelatorio(data.codigo);
+          io.to(data.codigo).emit('mostrar-relatorio', relatorio);
+          io.to(`host_${data.codigo}`).emit('mostrar-relatorio', relatorio);
+        }
+      }, 2000);
     }
-  });
-  
-  socket.on('proxima-pergunta', (codigo) => {
-    proximaPergunta(codigo);
   });
   
   function enviarPergunta(codigo, indice) {
@@ -388,8 +465,8 @@ io.on('connection', (socket) => {
     const pergunta = sala.perguntas[indice];
     sala.respostasPerguntaAtual = {};
     sala.perguntaAtual = indice;
+    sala.etapa = 'pergunta';
     
-    // Para o apresentador (host) - mostra as opções completas e os textos curtos
     const dadosHost = {
       pergunta: {
         texto: pergunta.texto,
@@ -407,10 +484,11 @@ io.on('connection', (socket) => {
           C: pergunta.opcao_c_botao || 'C',
           D: pergunta.opcao_d_botao || 'D'
         }
-      }
+      },
+      numero: indice + 1,
+      total: sala.perguntas.length
     };
     
-    // Para o jogador - mostra apenas os textos curtos nos botões
     const dadosJogador = {
       pergunta: {
         texto: pergunta.texto,
@@ -422,17 +500,29 @@ io.on('connection', (socket) => {
         B: pergunta.opcao_b_botao || 'B',
         C: pergunta.opcao_c_botao || 'C',
         D: pergunta.opcao_d_botao || 'D'
-      }
+      },
+      numero: indice + 1,
+      total: sala.perguntas.length
     };
     
     io.to(codigo).emit('nova-pergunta-jogador', dadosJogador);
     io.to(`host_${codigo}`).emit('nova-pergunta-host', dadosHost);
     
-    setTimeout(() => {
-      if (sala.perguntaAtual === indice && sala.jogoAtivo) {
-        proximaPergunta(codigo);
+    // Timer automático
+    sala.tempoRestante = pergunta.tempo;
+    sala.timerInterval = setInterval(() => {
+      sala.tempoRestante--;
+      if (sala.tempoRestante <= 0) {
+        clearInterval(sala.timerInterval);
+        if (sala.jogoAtivo && sala.etapa === 'pergunta') {
+          // Tempo esgotado, vai para o relatório
+          sala.etapa = 'relatorio';
+          const relatorio = gerarRelatorio(codigo);
+          io.to(codigo).emit('mostrar-relatorio', relatorio);
+          io.to(`host_${codigo}`).emit('mostrar-relatorio', relatorio);
+        }
       }
-    }, pergunta.tempo * 1000);
+    }, 1000);
   }
   
   function enviarRanking(codigo) {
@@ -445,21 +535,12 @@ io.on('connection', (socket) => {
     io.to(`host_${codigo}`).emit('atualizar-ranking', ranking);
   }
   
-  function proximaPergunta(codigo) {
-    const sala = salas[codigo];
-    if (!sala || !sala.jogoAtivo) return;
-    const proximoIndice = sala.perguntaAtual + 1;
-    if (proximoIndice < sala.perguntas.length) {
-      enviarPergunta(codigo, proximoIndice);
-    } else {
-      finalizarJogo(codigo);
-    }
-    enviarRanking(codigo);
-  }
-  
   async function finalizarJogo(codigo) {
     const sala = salas[codigo];
     if (!sala) return;
+    
+    if (sala.timerInterval) clearInterval(sala.timerInterval);
+    
     const ranking = Object.values(sala.jogadores).sort((a, b) => b.pontuacao - a.pontuacao);
     try {
       await pool.query('INSERT INTO partidas (quiz_id, codigo, ranking) VALUES ($1, $2, $3)',
@@ -467,6 +548,7 @@ io.on('connection', (socket) => {
     } catch (err) {
       console.error('Erro ao salvar partida:', err);
     }
+    
     io.to(codigo).emit('fim-jogo', { ranking: ranking });
     io.to(`host_${codigo}`).emit('fim-jogo', { ranking: ranking });
     sala.jogoAtivo = false;

@@ -66,7 +66,6 @@
                     <div id="salaInfo" style="display:none; margin-top: 20px;">
                         <div class="codigo-sala-grande" id="codigoSalaDisplay"></div>
                         
-                        <!-- CONTROLES DO JOGO - VISÍVEIS AQUI -->
                         <div class="controles-jogo" style="display: flex; gap: 15px; justify-content: center; margin: 20px 0; flex-wrap: wrap;">
                             <button id="btnIniciarJogo" onclick="iniciarJogo()" class="btn-jogo" style="background: #27ae60; color: white; padding: 15px 40px; border: none; border-radius: 10px; font-size: 1.2em; cursor: pointer;">
                                 ▶ INICIAR JOGO
@@ -76,7 +75,6 @@
                             </button>
                         </div>
                         
-                        <!-- BOTÃO DO APRESENTADOR -->
                         <div style="margin: 20px 0; text-align: center;">
                             <button onclick="abrirApresentador()" class="btn-principal" style="background: #9b59b6; width: auto; padding: 15px 40px; font-size: 1.2em;">
                                 🖥️ ABRIR APRESENTADOR
@@ -105,15 +103,21 @@
             <div id="tabConfig" class="tab-content" style="display:none;">
                 <div class="config-panel">
                     <h3>🎨 Personalização do Quiz</h3>
+                    
+                    <!-- Upload de música MP3 -->
                     <div class="config-item">
-                        <label>🎵 Música de fundo (URL MP3):</label>
-                        <input type="text" id="musicaUrl" placeholder="https://exemplo.com/musica.mp3" class="input-grande">
-                        <button onclick="testarMusica()" class="btn-pequeno">▶️ Testar</button>
+                        <label>🎵 Música de fundo (MP3):</label>
+                        <input type="file" id="uploadMusica" accept="audio/mpeg">
+                        <button onclick="uploadMusica()" class="btn-pequeno">⬆️ Upload</button>
+                        <div id="musicaPreview" style="margin-top: 10px;"></div>
+                        <input type="hidden" id="musicaUrl" value="">
                     </div>
+                    
                     <div class="config-item">
                         <label>🎨 Cor de fundo do jogo:</label>
                         <input type="color" id="corFundo" value="#667eea">
                     </div>
+                    
                     <button onclick="salvarConfigQuiz()" class="btn-principal">💾 Salvar Configurações</button>
                 </div>
             </div>

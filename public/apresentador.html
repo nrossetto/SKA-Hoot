@@ -81,14 +81,8 @@
         .opcao-b { background: #2ecc71; }
         .opcao-c { background: #3498db; }
         .opcao-d { background: #f1c40f; color: #2c3e50; }
-        
-        .sem-jogo {
-            text-align: center;
-            color: #7f8c8d;
-            font-size: 1.2em;
-        }
+        .sem-jogo { text-align: center; color: #7f8c8d; font-size: 1.2em; }
         .sem-jogo h2 { color: white; margin-bottom: 20px; }
-        
         .info-bar {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -122,12 +116,7 @@
             margin: 20px 0;
             overflow: hidden;
         }
-        .timer-bar {
-            height: 100%;
-            width: 100%;
-            background: #f1c40f;
-            transition: width 0.1s linear;
-        }
+        .timer-bar { height: 100%; width: 100%; background: #f1c40f; transition: width 0.1s linear; }
         @media (max-width: 768px) {
             .opcoes { grid-template-columns: 1fr; }
             .pergunta-texto { font-size: 1.5em; }
@@ -142,11 +131,7 @@
             <h1 style="color: white;">🎮 Apresentador</h1>
             <div class="codigo" id="codigoDisplay">---</div>
         </div>
-        
-        <div class="timer">
-            <div class="timer-bar" id="timerBar"></div>
-        </div>
-        
+        <div class="timer"><div class="timer-bar" id="timerBar"></div></div>
         <div class="pergunta-area" id="perguntaArea">
             <div class="sem-jogo">
                 <h2>🎯 Aguardando o jogo começar...</h2>
@@ -154,7 +139,6 @@
                 <p style="margin-top: 20px;">📌 Abra esta janela em um projetor ou segunda tela</p>
             </div>
         </div>
-        
         <div class="info-bar">
             <div class="jogadores">
                 <h3>👥 Jogadores (<span id="totalJogadores">0</span>)</h3>
@@ -166,96 +150,59 @@
             </div>
         </div>
     </div>
-    
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const codigoSala = urlParams.get('codigo');
-        
-        if (!codigoSala) {
-            alert('❌ Código da sala não informado!');
-            window.location.href = '/host';
-        }
-        
+        if (!codigoSala) { alert('Código inválido!'); window.location.href = '/host'; }
         document.getElementById('codigoDisplay').innerHTML = `📱 ${codigoSala}`;
-        
         const socket = io();
         let timerInterval;
-        
-        socket.on('connect', () => {
-            console.log('✅ Conectado ao servidor');
-            socket.emit('host-conectar', codigoSala);
-        });
-        
-        socket.on('host-entrada-aceita', () => {
-            console.log('✅ Conectado à sala como apresentador');
-        });
-        
+        socket.on('connect', () => { socket.emit('host-conectar', codigoSala); });
+        socket.on('host-entrada-aceita', () => console.log('Conectado'));
         socket.on('nova-pergunta-host', (data) => {
             const area = document.getElementById('perguntaArea');
-            const pergunta = data.pergunta;
-            
-            let imagemHtml = '';
-            if (pergunta.imagem_url) {
-                imagemHtml = `<img src="${pergunta.imagem_url}" class="pergunta-imagem">`;
-            }
-            
+            const p = data.pergunta;
+            let img = p.imagem_url ? `<img src="${p.imagem_url}" class="pergunta-imagem">` : '';
             area.innerHTML = `
-                ${imagemHtml}
-                <div class="pergunta-texto">${pergunta.texto}</div>
+                ${img}
+                <div class="pergunta-texto">${p.texto}</div>
                 <div class="opcoes">
-                    <div class="opcao opcao-a">🔴 A - ${pergunta.opcoes.A}</div>
-                    <div class="opcao opcao-b">🟢 B - ${pergunta.opcoes.B}</div>
-                    <div class="opcao opcao-c">🔵 C - ${pergunta.opcoes.C}</div>
-                    <div class="opcao opcao-d">🟡 D - ${pergunta.opcoes.D}</div>
+                    <div class="opcao opcao-a">🔴 A - ${p.opcoes.A}</div>
+                    <div class="opcao opcao-b">🟢 B - ${p.opcoes.B}</div>
+                    <div class="opcao opcao-c">🔵 C - ${p.opcoes.C}</div>
+                    <div class="opcao opcao-d">🟡 D - ${p.opcoes.D}</div>
                 </div>
+                <div style="margin-top:10px; color:#7f8c8d;">Botões: ${p.botoes.A} | ${p.botoes.B} | ${p.botoes.C} | ${p.botoes.D}</div>
             `;
-            
-            // Timer
-            let tempo = pergunta.tempo;
+            let tempo = p.tempo;
             const barra = document.getElementById('timerBar');
             clearInterval(timerInterval);
             timerInterval = setInterval(() => {
                 tempo--;
-                const percentual = (tempo / pergunta.tempo) * 100;
-                barra.style.width = `${percentual}%`;
+                barra.style.width = `${(tempo / p.tempo) * 100}%`;
                 if (tempo <= 0) clearInterval(timerInterval);
             }, 1000);
         });
-        
         socket.on('atualizar-jogadores', (jogadores) => {
-            const lista = document.getElementById('listaJogadores');
             document.getElementById('totalJogadores').innerText = jogadores.length;
-            lista.innerHTML = jogadores.map(j => 
+            document.getElementById('listaJogadores').innerHTML = jogadores.map(j => 
                 `<div class="jogador-item">${j.emoji} ${j.nome} - ${j.pontuacao} pts</div>`
             ).join('');
         });
-        
         socket.on('atualizar-ranking', (ranking) => {
-            const lista = document.getElementById('listaRanking');
-            lista.innerHTML = ranking.slice(0, 10).map(r => 
+            document.getElementById('listaRanking').innerHTML = ranking.map(r => 
                 `<div class="ranking-item">${r.posicao}º ${r.emoji} ${r.nome} - ${r.pontuacao} pts</div>`
             ).join('');
         });
-        
         socket.on('fim-jogo', (data) => {
             const area = document.getElementById('perguntaArea');
-            area.innerHTML = `
-                <div style="text-align: center; padding: 40px;">
-                    <h2 style="color: #f1c40f; font-size: 3em;">🏆 FIM DE JOGO!</h2>
-                    <p style="color: #2c3e50; font-size: 1.5em; margin-top: 20px;">
-                        Campeão: ${data.ranking[0]?.nome}
-                    </p>
-                    <p style="color: #2c3e50; font-size: 1.2em;">
-                        ${data.ranking[0]?.pontuacao} pontos
-                    </p>
-                </div>
-            `;
+            area.innerHTML = `<div style="text-align:center;padding:40px;">
+                <h2 style="color:#f1c40f;font-size:3em;">🏆 FIM DE JOGO!</h2>
+                <p style="color:#2c3e50;font-size:1.5em;margin-top:20px;">Campeão: ${data.ranking[0]?.nome}</p>
+                <p style="color:#2c3e50;font-size:1.2em;">${data.ranking[0]?.pontuacao} pontos</p>
+            </div>`;
             clearInterval(timerInterval);
-        });
-        
-        socket.on('erro', (msg) => {
-            alert('Erro: ' + msg);
         });
     </script>
 </body>

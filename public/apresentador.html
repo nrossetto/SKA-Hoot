@@ -40,12 +40,12 @@
         }
         .header h1 { font-size: 1.8em; }
         .codigo {
-            font-size: 1.8em;
+            font-size: 3em; /* MAIOR */
             background: #27ae60;
-            padding: 8px 25px;
-            border-radius: 12px;
+            padding: 10px 35px;
+            border-radius: 15px;
             font-weight: bold;
-            letter-spacing: 4px;
+            letter-spacing: 8px;
         }
         .jogadores-count {
             background: rgba(255,255,255,0.1);
@@ -64,22 +64,38 @@
             min-height: 400px;
         }
         
-        /* QR Code */
+        /* QR CODE - MAIOR E CENTRALIZADO */
         .qr-container {
             background: white;
-            padding: 20px;
-            border-radius: 15px;
-            margin-bottom: 15px;
+            padding: 25px;
+            border-radius: 20px;
+            margin-bottom: 20px;
             text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.5s ease;
+        }
+        .qr-container.oculto {
+            display: none !important;
+        }
+        .qr-container #qrcode {
+            display: inline-block;
+        }
+        .qr-container #qrcode img {
+            width: 200px !important;
+            height: 200px !important;
         }
         .qr-container p {
             color: #2c3e50;
-            font-size: 0.9em;
-            margin-top: 8px;
+            font-size: 1.1em;
+            margin-top: 10px;
+            font-weight: 500;
         }
         .qr-container .url {
             color: #7f8c8d;
-            font-size: 0.8em;
+            font-size: 0.9em;
             word-break: break-all;
         }
         
@@ -327,7 +343,6 @@
         
         .oculto { display: none !important; }
         
-        /* Info do timer no apresentador */
         .timer-info {
             color: #7f8c8d;
             font-size: 0.9em;
@@ -341,8 +356,12 @@
             .podio-positions { flex-direction: column; align-items: center; }
             .pergunta-texto { font-size: 1.4em; }
             .header h1 { font-size: 1.2em; }
-            .codigo { font-size: 1.2em; padding: 5px 15px; }
-            .qr-container { padding: 10px; }
+            .codigo { font-size: 2em; padding: 8px 20px; letter-spacing: 5px; }
+            .qr-container { padding: 15px; }
+            .qr-container #qrcode img {
+                width: 150px !important;
+                height: 150px !important;
+            }
         }
     </style>
 </head>
@@ -357,7 +376,7 @@
             </div>
         </div>
         
-        <!-- QR Code -->
+        <!-- QR CODE - MAIOR E CENTRALIZADO -->
         <div class="qr-container" id="qrContainer">
             <div id="qrcode"></div>
             <p>📱 Aponte a câmera para entrar no jogo</p>
@@ -385,10 +404,10 @@
                 <div class="timer"><div class="timer-bar" id="timerBar"></div></div>
                 <div class="timer-info" id="timerTexto">⏱ 15 segundos</div>
                 <div class="opcoes-grid" id="opcoesGrid">
-                    <div class="opcao opcao-a" id="opcaoA">🔴 A - Brasília</div>
-                    <div class="opcao opcao-b" id="opcaoB">🟢 B - São Paulo</div>
-                    <div class="opcao opcao-c" id="opcaoC">🔵 C - Rio de Janeiro</div>
-                    <div class="opcao opcao-d" id="opcaoD">🟡 D - Salvador</div>
+                    <div class="opcao opcao-a" id="opcaoA">🔴 ★ A - Brasília</div>
+                    <div class="opcao opcao-b" id="opcaoB">🟢 ▲ B - São Paulo</div>
+                    <div class="opcao opcao-c" id="opcaoC">🔵 ● C - Rio de Janeiro</div>
+                    <div class="opcao opcao-d" id="opcaoD">🟡 ■ D - Salvador</div>
                 </div>
                 <div style="margin-top: 15px; color: #7f8c8d; font-size: 0.9em;" id="botoesInfo">Botões: BRA | SP | RIO | SA</div>
                 <div style="margin-top: 5px; color: #e74c3c; font-size: 0.85em;" id="removidasInfo"></div>
@@ -470,12 +489,18 @@
             const url = 'https://ska-hoot.onrender.com';
             qrCode = new QRCode(qrContainer, {
                 text: url,
-                width: 150,
-                height: 150,
+                width: 200,
+                height: 200,
                 colorDark: '#1a1a2e',
                 colorLight: '#ffffff',
                 correctLevel: QRCode.CorrectLevel.H
             });
+        }
+        
+        // ============ OCULTAR QR CODE QUANDO O JOGO COMEÇAR ============
+        function ocultarQR() {
+            const qrContainer = document.getElementById('qrContainer');
+            qrContainer.classList.add('oculto');
         }
         
         // ============ CONEXÃO ============
@@ -507,7 +532,10 @@
                 atualizarListaJogadores();
             });
             
-            socket.on('jogo-iniciado', () => {});
+            socket.on('jogo-iniciado', () => {
+                // OCULTAR QR QUANDO O JOGO COMEÇAR
+                ocultarQR();
+            });
             
             socket.on('nova-pergunta-apresentador', (data) => {
                 mostrarPergunta(data);
@@ -599,7 +627,7 @@
                 imgDiv.innerHTML = '';
             }
             
-            // Opções
+            // Opções com símbolos
             document.getElementById('opcaoA').innerHTML = `🔴 ★ ${p.opcoes.A}`;
             document.getElementById('opcaoB').innerHTML = `🟢 ▲ ${p.opcoes.B}`;
             document.getElementById('opcaoC').innerHTML = `🔵 ● ${p.opcoes.C}`;

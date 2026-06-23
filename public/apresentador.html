@@ -400,7 +400,6 @@
                 <div class="timer-info" id="timerTexto">⏱ 15 segundos</div>
                 <div class="opcoes-grid" id="opcoesGrid"></div>
                 <div style="margin-top: 15px; color: #7f8c8d; font-size: 0.9em;" id="botoesInfo"></div>
-                <div style="margin-top: 5px; color: #e74c3c; font-size: 0.85em;" id="removidasInfo"></div>
             </div>
             
             <!-- RESULTADO -->
@@ -615,7 +614,7 @@
                 imgDiv.innerHTML = '';
             }
             
-            // Gerar opções APENAS com as disponíveis
+            // Gerar opções APENAS com as disponíveis (sem menção de removidas)
             const opcoesGrid = document.getElementById('opcoesGrid');
             const letras = ['A', 'B', 'C', 'D'];
             const opcoesHtml = [];
@@ -637,19 +636,12 @@
             
             opcoesGrid.innerHTML = opcoesHtml.join('');
             
-            // Informações dos botões
+            // Informações dos botões (apenas os disponíveis)
             const botoesInfo = letras
                 .filter(l => !(p.removidas && p.removidas.includes(l)))
                 .map(l => `${p.botoes[l] || l}`)
                 .join(' | ');
             document.getElementById('botoesInfo').innerHTML = `Botões: ${botoesInfo}`;
-            
-            if (p.removidas && p.removidas.length > 0) {
-                document.getElementById('removidasInfo').innerHTML = 
-                    `❌ Opções removidas: ${p.removidas.join(', ')}`;
-            } else {
-                document.getElementById('removidasInfo').innerHTML = '';
-            }
             
             document.getElementById('timerBar').style.width = '100%';
             document.getElementById('timerTexto').innerHTML = `⏱ ${p.tempo} segundos`;

@@ -16,7 +16,7 @@ const io = socketIo(server, {
 const PORT = process.env.PORT || 3000;
 const SENHA_MESTRA = process.env.SENHA_MESTRA || 'ska2026';
 
-// Configurar armazenamento de arquivos
+// ============ CONFIGURAÇÃO DE UPLOAD ============
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, 'public/uploads/');
@@ -29,15 +29,18 @@ const storage = multer.diskStorage({
 
 const upload = multer({ 
   storage: storage,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+  limits: { fileSize: 10 * 1024 * 1024 }
 });
 
-// Criar pasta de uploads
-if (!fs.existsSync('public/uploads')) {
-  fs.mkdirSync('public/uploads', { recursive: true });
+// ============ CRIAÇÃO DE PASTAS ============
+const pastas = ['public/uploads', 'historico'];
+for (const pasta of pastas) {
+  if (!fs.existsSync(pasta)) {
+    fs.mkdirSync(pasta, { recursive: true });
+  }
 }
 
-// ============ CONEXÃO COM POSTGRESQL ============
+// ============ BANCO DE DADOS (PostgreSQL) ============
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
@@ -55,7 +58,6 @@ pool.connect((err, client, release) => {
   }
 });
 
-// ============ CRIAÇÃO DAS TABELAS ============
 async function initDatabase() {
   const client = await pool.connect();
   try {
@@ -81,12 +83,16 @@ async function initDatabase() {
         imagem_url TEXT,
         opcao_a TEXT,
         opcao_a_botao TEXT,
+        opcao_a_remover BOOLEAN DEFAULT FALSE,
         opcao_b TEXT,
         opcao_b_botao TEXT,
+        opcao_b_remover BOOLEAN DEFAULT FALSE,
         opcao_c TEXT,
         opcao_c_botao TEXT,
+        opcao_c_remover BOOLEAN DEFAULT FALSE,
         opcao_d TEXT,
         opcao_d_botao TEXT,
+        opcao_d_remover BOOLEAN DEFAULT FALSE,
         correta CHAR(1),
         tempo INTEGER DEFAULT 15
       )
@@ -120,6 +126,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
 app.use('/uploads', express.static('public/uploads'));
 
+// ============ SALAS EM MEMÓRIA ============
 let salas = {};
 let limpezaAtiva = false;
 
@@ -151,7 +158,7 @@ function gerarCodigo() {
   return codigo;
 }
 
-// ============ API ROTAS ============
+// ============ API ============
 
 app.post('/api/verificar-senha', (req, res) => {
   res.json({ sucesso: req.body.senha === SENHA_MESTRA });
@@ -233,24 +240,28 @@ app.post('/api/quiz/salvar', async (req, res) => {
       await client.query(`
         INSERT INTO perguntas (
           quiz_id, texto, imagem_url,
-          opcao_a, opcao_a_botao,
-          opcao_b, opcao_b_botao,
-          opcao_c, opcao_c_botao,
-          opcao_d, opcao_d_botao,
+          opcao_a, opcao_a_botao, opcao_a_remover,
+          opcao_b, opcao_b_botao, opcao_b_remover,
+          opcao_c, opcao_c_botao, opcao_c_remover,
+          opcao_d, opcao_d_botao, opcao_d_remover,
           correta, tempo
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       `, [
         quizId,
         p.texto || '',
         p.imagem_url || null,
         p.opcao_a || '',
         p.opcao_a_botao || '',
+        p.opcao_a_remover || false,
         p.opcao_b || '',
         p.opcao_b_botao || '',
+        p.opcao_b_remover || false,
         p.opcao_c || '',
         p.opcao_c_botao || '',
+        p.opcao_c_remover || false,
         p.opcao_d || '',
         p.opcao_d_botao || '',
+        p.opcao_d_remover || false,
         p.correta || 'A',
         parseInt(p.tempo) || 15
       ]);
@@ -280,9 +291,8 @@ app.delete('/api/quiz/deletar/:id', async (req, res) => {
   }
 });
 
-// ============ EXPORT / IMPORT QUIZ ============
+// ============ EXPORT / IMPORT ============
 
-// ROTA DE EXPORT: Baixa o JSON com as perguntas + imagens
 app.get('/api/quiz/export/:id', async (req, res) => {
   const quizId = parseInt(req.params.id);
   if (isNaN(quizId)) {
@@ -290,47 +300,39 @@ app.get('/api/quiz/export/:id', async (req, res) => {
   }
 
   try {
-    // Buscar dados do quiz
     const quizResult = await pool.query('SELECT nome FROM quizzes WHERE id = $1', [quizId]);
     if (quizResult.rows.length === 0) {
       return res.status(404).json({ sucesso: false, erro: 'Quiz não encontrado' });
     }
 
-    // Buscar perguntas
-    const perguntasResult = await pool.query(
-      'SELECT * FROM perguntas WHERE quiz_id = $1 ORDER BY id',
-      [quizId]
-    );
+    const perguntasResult = await pool.query('SELECT * FROM perguntas WHERE quiz_id = $1 ORDER BY id', [quizId]);
 
-    // Montar objeto de exportação (sem cor_fundo, sem musica_url)
     const exportData = {
       nome: quizResult.rows[0].nome,
       perguntas: perguntasResult.rows.map(p => {
-        // Criar cópia sem os campos que não queremos exportar
         const { id, quiz_id, imagem_url, ...rest } = p;
         return {
           ...rest,
-          // Se tiver imagem_url, tentamos ler o arquivo e converter para base64
           imagem_base64: p.imagem_url ? obterImagemBase64(p.imagem_url) : null,
           imagem_tipo: p.imagem_url ? obterTipoImagem(p.imagem_url) : null
         };
       })
     };
 
-    // Enviar como download
+    // JSON ESTRUTURADO (pretty print)
+    const jsonStr = JSON.stringify(exportData, null, 2);
+
     res.setHeader('Content-Disposition', `attachment; filename="${quizResult.rows[0].nome.replace(/[^a-zA-Z0-9]/g, '_')}.json"`);
     res.setHeader('Content-Type', 'application/json');
-    res.json(exportData);
+    res.send(jsonStr);
   } catch (err) {
     console.error('Erro ao exportar quiz:', err);
     res.status(500).json({ sucesso: false, erro: err.message });
   }
 });
 
-// Função auxiliar: ler imagem do disco e converter para base64
 function obterImagemBase64(imagemUrl) {
   try {
-    // Exemplo: /uploads/123456-imagem.jpg
     const caminho = path.join(__dirname, 'public', imagemUrl);
     if (fs.existsSync(caminho)) {
       const buffer = fs.readFileSync(caminho);
@@ -349,7 +351,6 @@ function obterTipoImagem(imagemUrl) {
   return `image/${ext}`;
 }
 
-// ROTA DE IMPORT: Recebe o JSON e cria um novo quiz
 app.post('/api/quiz/import', async (req, res) => {
   const { nome, perguntas } = req.body;
 
@@ -365,19 +366,16 @@ app.post('/api/quiz/import', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Criar o quiz com o nome importado
     const quizResult = await client.query(
       'INSERT INTO quizzes (nome) VALUES ($1) RETURNING id',
       [nome.trim()]
     );
     const quizId = quizResult.rows[0].id;
 
-    // Inserir perguntas
     let imagensSalvas = 0;
     for (const p of perguntas) {
       let imagemUrl = null;
 
-      // Se a pergunta tem imagem base64, salvar no disco
       if (p.imagem_base64 && p.imagem_base64.startsWith('data:image')) {
         const matches = p.imagem_base64.match(/^data:image\/([a-zA-Z]+);base64,(.+)$/);
         if (matches) {
@@ -395,24 +393,28 @@ app.post('/api/quiz/import', async (req, res) => {
       await client.query(`
         INSERT INTO perguntas (
           quiz_id, texto, imagem_url,
-          opcao_a, opcao_a_botao,
-          opcao_b, opcao_b_botao,
-          opcao_c, opcao_c_botao,
-          opcao_d, opcao_d_botao,
+          opcao_a, opcao_a_botao, opcao_a_remover,
+          opcao_b, opcao_b_botao, opcao_b_remover,
+          opcao_c, opcao_c_botao, opcao_c_remover,
+          opcao_d, opcao_d_botao, opcao_d_remover,
           correta, tempo
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       `, [
         quizId,
         p.texto || '',
         imagemUrl,
         p.opcao_a || '',
         p.opcao_a_botao || '',
+        p.opcao_a_remover || false,
         p.opcao_b || '',
         p.opcao_b_botao || '',
+        p.opcao_b_remover || false,
         p.opcao_c || '',
         p.opcao_c_botao || '',
+        p.opcao_c_remover || false,
         p.opcao_d || '',
         p.opcao_d_botao || '',
+        p.opcao_d_remover || false,
         p.correta || 'A',
         parseInt(p.tempo) || 15
       ]);
@@ -433,6 +435,46 @@ app.post('/api/quiz/import', async (req, res) => {
   }
 });
 
+// ============ HISTÓRICO EM ARQUIVO JSON ============
+
+function salvarHistoricoEmArquivo(quizNome, codigo, ranking, perguntas, respostasDetalhadas) {
+  try {
+    const data = new Date();
+    const dataStr = data.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const nomeArquivo = `partida_${dataStr}_${quizNome.replace(/[^a-zA-Z0-9]/g, '_')}.json`;
+    
+    const historico = {
+      data: data.toISOString(),
+      quiz: quizNome,
+      codigo: codigo,
+      totalJogadores: ranking.length,
+      ranking: ranking.map((j, i) => ({
+        posicao: i + 1,
+        nome: j.nome,
+        emoji: j.emoji,
+        pontuacao: j.pontuacao
+      })),
+      respostas: respostasDetalhadas || [],
+      perguntas: perguntas.map(p => ({
+        texto: p.texto,
+        opcoes: {
+          A: p.opcao_a,
+          B: p.opcao_b,
+          C: p.opcao_c,
+          D: p.opcao_d
+        },
+        correta: p.correta
+      }))
+    };
+
+    const caminho = path.join(__dirname, 'historico', nomeArquivo);
+    fs.writeFileSync(caminho, JSON.stringify(historico, null, 2));
+    console.log(`📁 Histórico salvo: ${nomeArquivo}`);
+  } catch (err) {
+    console.error('Erro ao salvar histórico:', err);
+  }
+}
+
 // ============ SALAS ============
 
 app.post('/api/sala/criar', async (req, res) => {
@@ -446,7 +488,7 @@ app.post('/api/sala/criar', async (req, res) => {
     if (result.rows.length === 0) {
       return res.json({ sucesso: false, erro: 'Quiz sem perguntas' });
     }
-    const quizResult = await pool.query('SELECT cor_fundo, musica_url FROM quizzes WHERE id = $1', [quizId]);
+    const quizResult = await pool.query('SELECT cor_fundo, musica_url, nome FROM quizzes WHERE id = $1', [quizId]);
     const codigo = gerarCodigo();
     const agora = Date.now();
     salas[codigo] = {
@@ -464,8 +506,10 @@ app.post('/api/sala/criar', async (req, res) => {
       timerInterval: null,
       cor_fundo: quizResult.rows[0]?.cor_fundo || '#667eea',
       musica_url: quizResult.rows[0]?.musica_url || null,
+      quizNomeOriginal: quizResult.rows[0]?.nome || quizNome || 'Quiz',
       criadaEm: agora,
-      ultimaAtividade: agora
+      ultimaAtividade: agora,
+      historicoRespostas: []
     };
     res.json({ sucesso: true, codigo: codigo });
   } catch (err) {
@@ -485,19 +529,68 @@ app.get('/api/sala/config/:codigo', async (req, res) => {
 
 // ============ HISTÓRICO ============
 
-app.delete('/api/historico/deletar', async (req, res) => {
+app.get('/api/historico/listar', async (req, res) => {
   try {
-    await pool.query('DELETE FROM partidas');
+    const pasta = path.join(__dirname, 'historico');
+    if (!fs.existsSync(pasta)) {
+      return res.json({ sucesso: true, arquivos: [] });
+    }
+    const arquivos = fs.readdirSync(pasta)
+      .filter(f => f.endsWith('.json'))
+      .map(f => {
+        const caminho = path.join(pasta, f);
+        const stat = fs.statSync(caminho);
+        return {
+          nome: f,
+          tamanho: stat.size,
+          data: stat.mtime
+        };
+      })
+      .sort((a, b) => b.data - a.data);
+    res.json({ sucesso: true, arquivos: arquivos });
+  } catch (err) {
+    res.json({ sucesso: false, erro: err.message });
+  }
+});
+
+app.get('/api/historico/baixar/:arquivo', async (req, res) => {
+  try {
+    const arquivo = req.params.arquivo;
+    const caminho = path.join(__dirname, 'historico', arquivo);
+    if (!fs.existsSync(caminho)) {
+      return res.status(404).json({ sucesso: false, erro: 'Arquivo não encontrado' });
+    }
+    res.download(caminho, arquivo);
+  } catch (err) {
+    res.status(500).json({ sucesso: false, erro: err.message });
+  }
+});
+
+app.delete('/api/historico/deletar/:arquivo', async (req, res) => {
+  try {
+    const arquivo = req.params.arquivo;
+    const caminho = path.join(__dirname, 'historico', arquivo);
+    if (!fs.existsSync(caminho)) {
+      return res.json({ sucesso: false, erro: 'Arquivo não encontrado' });
+    }
+    fs.unlinkSync(caminho);
     res.json({ sucesso: true });
   } catch (err) {
     res.json({ sucesso: false, erro: err.message });
   }
 });
 
-app.get('/api/historico', async (req, res) => {
+app.delete('/api/historico/deletar-todos', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM partidas ORDER BY data_hora DESC LIMIT 100');
-    res.json({ sucesso: true, historico: result.rows });
+    const pasta = path.join(__dirname, 'historico');
+    if (!fs.existsSync(pasta)) {
+      return res.json({ sucesso: true });
+    }
+    const arquivos = fs.readdirSync(pasta).filter(f => f.endsWith('.json'));
+    for (const f of arquivos) {
+      fs.unlinkSync(path.join(pasta, f));
+    }
+    res.json({ sucesso: true });
   } catch (err) {
     res.json({ sucesso: false, erro: err.message });
   }
@@ -566,6 +659,7 @@ io.on('connection', (socket) => {
     sala.perguntaAtual = 0;
     sala.etapa = 'pergunta';
     sala.ultimaAtividade = Date.now();
+    sala.historicoRespostas = [];
     io.to(codigo).emit('jogo-iniciado');
     io.to(`apresentador_${codigo}`).emit('jogo-iniciado');
     enviarPergunta(codigo, 0);
@@ -599,6 +693,14 @@ io.on('connection', (socket) => {
     if (!pergunta) return;
     if (sala.respostasPerguntaAtual[socket.id]) return;
     sala.ultimaAtividade = Date.now();
+    
+    // Verificar se a opção está removida
+    const opcaoRemovida = pergunta[`opcao_${data.resposta.toLowerCase()}_remover`];
+    if (opcaoRemovida) {
+      socket.emit('erro', 'Esta opção foi removida pelo apresentador');
+      return;
+    }
+    
     const isCorreta = data.resposta === pergunta.correta;
     let pontos = 0;
     if (isCorreta && data.tempoRestante > 0) {
@@ -607,21 +709,37 @@ io.on('connection', (socket) => {
     if (isCorreta) {
       sala.jogadores[socket.id].pontuacao += pontos;
     }
+    
     sala.respostasPerguntaAtual[socket.id] = {
       resposta: data.resposta,
       correta: isCorreta,
       pontos: pontos
     };
+    
+    // Salvar resposta detalhada para histórico
+    if (!sala.historicoRespostas[sala.perguntaAtual]) {
+      sala.historicoRespostas[sala.perguntaAtual] = {};
+    }
+    sala.historicoRespostas[sala.perguntaAtual][socket.id] = {
+      nome: sala.jogadores[socket.id].nome,
+      emoji: sala.jogadores[socket.id].emoji,
+      resposta: data.resposta,
+      correta: isCorreta,
+      pontos: pontos
+    };
+    
     let respostaCompleta = '';
     if (pergunta.correta === 'A') respostaCompleta = pergunta.opcao_a;
     else if (pergunta.correta === 'B') respostaCompleta = pergunta.opcao_b;
     else if (pergunta.correta === 'C') respostaCompleta = pergunta.opcao_c;
     else if (pergunta.correta === 'D') respostaCompleta = pergunta.opcao_d;
+    
     socket.emit('feedback', {
       correta: isCorreta,
       pontos: pontos,
       respostaCorreta: respostaCompleta
     });
+    
     const totalJogadores = Object.keys(sala.jogadores).length;
     const totalRespostas = Object.keys(sala.respostasPerguntaAtual).length;
     if (totalRespostas === totalJogadores && sala.jogoAtivo && sala.etapa === 'pergunta') {
@@ -696,6 +814,16 @@ io.on('connection', (socket) => {
     sala.etapa = 'pergunta';
     sala.tempoRestante = pergunta.tempo;
     sala.ultimaAtividade = Date.now();
+    
+    // Filtrar opções removidas
+    const opcoesRemovidas = [];
+    if (pergunta.opcao_a_remover) opcoesRemovidas.push('A');
+    if (pergunta.opcao_b_remover) opcoesRemovidas.push('B');
+    if (pergunta.opcao_c_remover) opcoesRemovidas.push('C');
+    if (pergunta.opcao_d_remover) opcoesRemovidas.push('D');
+    
+    const opcoesDisponiveis = ['A', 'B', 'C', 'D'].filter(o => !opcoesRemovidas.includes(o));
+    
     const dadosApresentador = {
       pergunta: {
         texto: pergunta.texto,
@@ -712,11 +840,14 @@ io.on('connection', (socket) => {
           B: pergunta.opcao_b_botao || 'B',
           C: pergunta.opcao_c_botao || 'C',
           D: pergunta.opcao_d_botao || 'D'
-        }
+        },
+        removidas: opcoesRemovidas,
+        disponiveis: opcoesDisponiveis
       },
       numero: indice + 1,
       total: sala.perguntas.length
     };
+    
     const dadosJogador = {
       pergunta: {
         texto: pergunta.texto,
@@ -729,11 +860,15 @@ io.on('connection', (socket) => {
         C: pergunta.opcao_c_botao || 'C',
         D: pergunta.opcao_d_botao || 'D'
       },
+      removidas: opcoesRemovidas,
+      disponiveis: opcoesDisponiveis,
       numero: indice + 1,
       total: sala.perguntas.length
     };
+    
     io.to(codigo).emit('nova-pergunta-jogador', dadosJogador);
     io.to(`apresentador_${codigo}`).emit('nova-pergunta-apresentador', dadosApresentador);
+    
     sala.timerInterval = setInterval(() => {
       if (!sala.jogoAtivo || sala.etapa !== 'pergunta') {
         clearInterval(sala.timerInterval);
@@ -775,16 +910,43 @@ io.on('connection', (socket) => {
       clearInterval(sala.timerInterval);
       sala.timerInterval = null;
     }
+    
     const ranking = Object.values(sala.jogadores).sort((a, b) => b.pontuacao - a.pontuacao);
+    
+    // Salvar no banco (para compatibilidade)
     try {
       await pool.query('INSERT INTO partidas (quiz_id, codigo, ranking) VALUES ($1, $2, $3)',
         [sala.quiz_id, codigo, JSON.stringify(ranking)]);
     } catch (err) {
-      console.error('Erro ao salvar partida:', err);
+      console.error('Erro ao salvar partida no banco:', err);
     }
+    
+    // Salvar em arquivo JSON (HISTÓRICO)
+    try {
+      const respostasDetalhadas = [];
+      for (let i = 0; i < sala.perguntas.length; i++) {
+        const respostasDaPergunta = sala.historicoRespostas[i] || {};
+        respostasDetalhadas.push({
+          pergunta: sala.perguntas[i].texto,
+          respostas: Object.values(respostasDaPergunta)
+        });
+      }
+      
+      salvarHistoricoEmArquivo(
+        sala.quizNomeOriginal,
+        codigo,
+        ranking,
+        sala.perguntas,
+        respostasDetalhadas
+      );
+    } catch (err) {
+      console.error('Erro ao salvar histórico em arquivo:', err);
+    }
+    
     sala.jogoAtivo = false;
     sala.etapa = 'podio';
     sala.ultimaAtividade = Date.now();
+    
     io.to(codigo).emit('fim-jogo', { ranking: ranking });
     io.to(`apresentador_${codigo}`).emit('fim-jogo', { ranking: ranking });
   }
@@ -819,7 +981,7 @@ app.get('*', (req, res) => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`
   ╔═══════════════════════════════════════╗
-  ║     🎮 SKA-HOOT COM EXPORT/IMPORT    ║
+  ║     🎮 SKA-HOOT VERSÃO FINAL! 🎮      ║
   ╠═══════════════════════════════════════╣
   ║  Acesse: http://localhost:${PORT}      ║
   ║  Host: http://localhost:${PORT}/host   ║

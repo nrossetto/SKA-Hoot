@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SKA-HOOT - Apresentador</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -61,6 +62,25 @@
             justify-content: center;
             align-items: center;
             min-height: 400px;
+        }
+        
+        /* QR Code */
+        .qr-container {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .qr-container p {
+            color: #2c3e50;
+            font-size: 0.9em;
+            margin-top: 8px;
+        }
+        .qr-container .url {
+            color: #7f8c8d;
+            font-size: 0.8em;
+            word-break: break-all;
         }
         
         /* Tela de espera */
@@ -155,6 +175,11 @@
             color: white;
             text-align: center;
         }
+        .opcao-removida {
+            opacity: 0.3;
+            text-decoration: line-through;
+            background: #95a5a6 !important;
+        }
         .opcao-a { background: #e74c3c; }
         .opcao-b { background: #2ecc71; }
         .opcao-c { background: #3498db; }
@@ -231,7 +256,6 @@
         .ranking-item .posicao { font-weight: bold; color: #3498db; }
         .ranking-item .nome { flex: 1; margin-left: 15px; }
         .ranking-item .pontos { font-weight: bold; color: #2c3e50; }
-        .top-3 .ranking-item { background: #f8f9fa; border-radius: 8px; margin: 5px 0; }
         
         /* Pódio */
         .podio-area {
@@ -272,7 +296,6 @@
             justify-content: space-between;
         }
         
-        /* Botão Avançar */
         .btn-avancar {
             padding: 15px 50px;
             font-size: 1.3em;
@@ -304,6 +327,13 @@
         
         .oculto { display: none !important; }
         
+        /* Info do timer no apresentador */
+        .timer-info {
+            color: #7f8c8d;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+        
         @media (max-width: 768px) {
             .opcoes-grid { grid-template-columns: 1fr; }
             .metricas { grid-template-columns: 1fr; }
@@ -312,6 +342,7 @@
             .pergunta-texto { font-size: 1.4em; }
             .header h1 { font-size: 1.2em; }
             .codigo { font-size: 1.2em; padding: 5px 15px; }
+            .qr-container { padding: 10px; }
         }
     </style>
 </head>
@@ -326,12 +357,19 @@
             </div>
         </div>
         
+        <!-- QR Code -->
+        <div class="qr-container" id="qrContainer">
+            <div id="qrcode"></div>
+            <p>📱 Aponte a câmera para entrar no jogo</p>
+            <div class="url" id="urlDisplay">https://ska-hoot.onrender.com</div>
+        </div>
+        
         <!-- Área Principal -->
         <div class="main-area" id="mainArea">
             <!-- TELA DE ESPERA -->
             <div id="telaEspera" class="tela-espera">
                 <h2>🎯 Aguardando jogadores...</h2>
-                <p>Compartilhe o código com os participantes</p>
+                <p>Compartilhe o código ou o QR Code</p>
                 <div class="lista-espera" id="listaEspera"></div>
                 <button id="btnIniciar" class="btn-iniciar" onclick="iniciarJogo()">▶ INICIAR JOGO</button>
                 <p style="color: #7f8c8d; margin-top: 15px; font-size: 0.9em;">
@@ -345,7 +383,7 @@
                 <div id="perguntaImagem" class="pergunta-imagem"></div>
                 <div class="pergunta-texto" id="perguntaTexto">Qual a capital do Brasil?</div>
                 <div class="timer"><div class="timer-bar" id="timerBar"></div></div>
-                <div id="timerTexto" style="color: #7f8c8d; font-size: 0.9em;">⏱ 15 segundos</div>
+                <div class="timer-info" id="timerTexto">⏱ 15 segundos</div>
                 <div class="opcoes-grid" id="opcoesGrid">
                     <div class="opcao opcao-a" id="opcaoA">🔴 A - Brasília</div>
                     <div class="opcao opcao-b" id="opcaoB">🟢 B - São Paulo</div>
@@ -353,6 +391,7 @@
                     <div class="opcao opcao-d" id="opcaoD">🟡 D - Salvador</div>
                 </div>
                 <div style="margin-top: 15px; color: #7f8c8d; font-size: 0.9em;" id="botoesInfo">Botões: BRA | SP | RIO | SA</div>
+                <div style="margin-top: 5px; color: #e74c3c; font-size: 0.85em;" id="removidasInfo"></div>
             </div>
             
             <!-- RESULTADO -->
@@ -411,9 +450,10 @@
         const codigoSala = urlParams.get('codigo');
         let socket;
         let jogadores = [];
-        let etapaAtual = 'espera'; // espera | pergunta | resultado | ranking | podio
+        let etapaAtual = 'espera';
         let musicaPlayer = null;
         let musicaUrl = null;
+        let qrCode = null;
         
         if (!codigoSala) {
             alert('❌ Código da sala não informado!');
@@ -421,6 +461,22 @@
         }
         
         document.getElementById('codigoDisplay').innerHTML = `📱 ${codigoSala}`;
+        document.getElementById('urlDisplay').innerHTML = `https://ska-hoot.onrender.com`;
+        
+        // ============ QR CODE ============
+        function gerarQRCode() {
+            const qrContainer = document.getElementById('qrcode');
+            qrContainer.innerHTML = '';
+            const url = 'https://ska-hoot.onrender.com';
+            qrCode = new QRCode(qrContainer, {
+                text: url,
+                width: 150,
+                height: 150,
+                colorDark: '#1a1a2e',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        }
         
         // ============ CONEXÃO ============
         function conectar() {
@@ -451,9 +507,7 @@
                 atualizarListaJogadores();
             });
             
-            socket.on('jogo-iniciado', () => {
-                // O apresentador já recebe a pergunta via evento específico
-            });
+            socket.on('jogo-iniciado', () => {});
             
             socket.on('nova-pergunta-apresentador', (data) => {
                 mostrarPergunta(data);
@@ -465,10 +519,6 @@
             
             socket.on('mostrar-relatorio', (data) => {
                 mostrarResultado(data);
-            });
-            
-            socket.on('mostrar-ranking', () => {
-                // O ranking já foi enviado via atualizar-ranking
             });
             
             socket.on('atualizar-ranking', (ranking) => {
@@ -494,7 +544,6 @@
                 ).join('');
             }
             
-            // Habilitar botão iniciar se tiver pelo menos 1 jogador
             const btn = document.getElementById('btnIniciar');
             if (btn) {
                 btn.disabled = jogadores.length === 0;
@@ -509,7 +558,6 @@
             socket.emit('apresentador-iniciar', codigoSala);
             document.getElementById('btnIniciar').disabled = true;
             
-            // Tocar música se houver
             if (musicaUrl) {
                 tocarMusica();
             }
@@ -551,15 +599,33 @@
                 imgDiv.innerHTML = '';
             }
             
-            document.getElementById('opcaoA').innerHTML = `🔴 A - ${p.opcoes.A}`;
-            document.getElementById('opcaoB').innerHTML = `🟢 B - ${p.opcoes.B}`;
-            document.getElementById('opcaoC').innerHTML = `🔵 C - ${p.opcoes.C}`;
-            document.getElementById('opcaoD').innerHTML = `🟡 D - ${p.opcoes.D}`;
+            // Opções
+            document.getElementById('opcaoA').innerHTML = `🔴 ★ ${p.opcoes.A}`;
+            document.getElementById('opcaoB').innerHTML = `🟢 ▲ ${p.opcoes.B}`;
+            document.getElementById('opcaoC').innerHTML = `🔵 ● ${p.opcoes.C}`;
+            document.getElementById('opcaoD').innerHTML = `🟡 ■ ${p.opcoes.D}`;
+            
+            // Marcar opções removidas
+            const removidas = p.removidas || [];
+            ['A', 'B', 'C', 'D'].forEach(letra => {
+                const el = document.getElementById(`opcao${letra}`);
+                if (removidas.includes(letra)) {
+                    el.classList.add('opcao-removida');
+                } else {
+                    el.classList.remove('opcao-removida');
+                }
+            });
             
             document.getElementById('botoesInfo').innerHTML = 
                 `Botões: ${p.botoes.A} | ${p.botoes.B} | ${p.botoes.C} | ${p.botoes.D}`;
             
-            // Resetar timer
+            if (removidas.length > 0) {
+                document.getElementById('removidasInfo').innerHTML = 
+                    `❌ Opções removidas: ${removidas.join(', ')}`;
+            } else {
+                document.getElementById('removidasInfo').innerHTML = '';
+            }
+            
             document.getElementById('timerBar').style.width = '100%';
             document.getElementById('timerTexto').innerHTML = `⏱ ${p.tempo} segundos`;
             
@@ -570,10 +636,9 @@
             const barra = document.getElementById('timerBar');
             const texto = document.getElementById('timerTexto');
             if (barra) {
-                // Assumindo tempo total de 15s (pegar do contexto)
-                const total = 15; // Idealmente viria do servidor
+                const total = 15;
                 const pct = (tempo / total) * 100;
-                barra.style.width = `${pct}%`;
+                barra.style.width = `${Math.max(0, pct)}%`;
                 if (pct < 30) barra.style.background = '#e74c3c';
                 else if (pct < 60) barra.style.background = '#f39c12';
                 else barra.style.background = '#f1c40f';
@@ -615,12 +680,10 @@
             const resto = ranking.slice(3);
             
             let html = '';
-            
-            // Top 3
             if (top3.length > 0) {
                 html += `<div class="top-3">`;
+                const medalhas = ['🥇', '🥈', '🥉'];
                 top3.forEach((r, i) => {
-                    const medalhas = ['🥇', '🥈', '🥉'];
                     html += `
                         <div class="ranking-item" style="background: ${i === 0 ? '#f1c40f20' : i === 1 ? '#bdc3c720' : '#e67e2220'}; border-radius: 10px; margin: 5px 0;">
                             <span class="posicao">${medalhas[i]} ${r.posicao}º</span>
@@ -631,8 +694,6 @@
                 });
                 html += `</div>`;
             }
-            
-            // Restante
             if (resto.length > 0) {
                 html += `<div style="margin-top: 10px;">`;
                 resto.forEach((r) => {
@@ -646,7 +707,6 @@
                 });
                 html += `</div>`;
             }
-            
             lista.innerHTML = html || '<p>Nenhum jogador ainda.</p>';
             
             etapaAtual = 'ranking';
@@ -661,7 +721,6 @@
             const top3 = ranking.slice(0, 3);
             const top10 = ranking.slice(3, 13);
             
-            // Pódio
             const podioHtml = document.getElementById('podioPosicoes');
             const medalhas = ['🥇', '🥈', '🥉'];
             const classes = ['podio-1', 'podio-2', 'podio-3'];
@@ -682,7 +741,6 @@
             }
             podioHtml.innerHTML = podioStr || '<p>Nenhum jogador.</p>';
             
-            // Top 10
             const top10Lista = document.getElementById('top10Lista');
             if (top10.length > 0) {
                 top10Lista.innerHTML = `
@@ -700,13 +758,13 @@
             
             etapaAtual = 'podio';
             
-            // Parar música
             if (musicaPlayer) {
                 musicaPlayer.pause();
             }
         }
         
-        // ============ INICIAR ============
+        // ============ INICIALIZAR ============
+        gerarQRCode();
         conectar();
     </script>
 </body>

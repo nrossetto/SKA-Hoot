@@ -17,7 +17,7 @@ function verificarSenha() {
             document.getElementById('telaDashboard').style.display = 'block';
             carregarQuizzes();
             carregarSelectQuizzes();
-            carregarHistorico();
+            carregarHistoricoArquivos();
         } else {
             alert('Senha incorreta!');
         }
@@ -116,7 +116,7 @@ function selecionarQuizJogar(id) {
     }
 }
 
-// ============ EXPORT (CORRIGIDO) ============
+// ============ EXPORT ============
 function exportarQuiz(id) {
     fetch(`/api/quiz/export/${id}`)
         .then(response => {
@@ -273,30 +273,47 @@ function renderizarPerguntas() {
                 <input type="hidden" class="imagem-url" data-idx="${idx}" value="${p.imagem_url || ''}">
             </div>
             
-            <input type="text" placeholder="Texto da pergunta" value="${escapeHtml(p.texto || '')}" class="pergunta-texto" data-idx="${idx}">
+            <!-- TEXTAREA COM 4 LINHAS -->
+            <textarea class="pergunta-texto-area" rows="4" placeholder="Texto da pergunta" data-idx="${idx}">${escapeHtml(p.texto || '')}</textarea>
             
             <div class="opcao-item">
                 <span class="opcao-simbolo" style="color: #e74c3c;">★</span>
                 <input type="text" placeholder="Texto completo (ex: Brasília)" value="${escapeHtml(p.opcao_a || '')}" class="resposta-texto" data-opcao="A" data-idx="${idx}">
                 <input type="text" placeholder="Texto curto (ex: BRA)" value="${escapeHtml(p.opcao_a_botao || '')}" class="botao-texto" data-opcao="A" data-idx="${idx}">
+                <div class="opcao-remover">
+                    <input type="checkbox" id="removerA_${idx}" data-opcao="A" data-idx="${idx}" ${p.opcao_a_remover ? 'checked' : ''}>
+                    <label for="removerA_${idx}">❌ Remover</label>
+                </div>
             </div>
             
             <div class="opcao-item">
                 <span class="opcao-simbolo" style="color: #2ecc71;">▲</span>
                 <input type="text" placeholder="Texto completo (ex: São Paulo)" value="${escapeHtml(p.opcao_b || '')}" class="resposta-texto" data-opcao="B" data-idx="${idx}">
                 <input type="text" placeholder="Texto curto (ex: SP)" value="${escapeHtml(p.opcao_b_botao || '')}" class="botao-texto" data-opcao="B" data-idx="${idx}">
+                <div class="opcao-remover">
+                    <input type="checkbox" id="removerB_${idx}" data-opcao="B" data-idx="${idx}" ${p.opcao_b_remover ? 'checked' : ''}>
+                    <label for="removerB_${idx}">❌ Remover</label>
+                </div>
             </div>
             
             <div class="opcao-item">
                 <span class="opcao-simbolo" style="color: #3498db;">●</span>
                 <input type="text" placeholder="Texto completo (ex: Rio de Janeiro)" value="${escapeHtml(p.opcao_c || '')}" class="resposta-texto" data-opcao="C" data-idx="${idx}">
                 <input type="text" placeholder="Texto curto (ex: RIO)" value="${escapeHtml(p.opcao_c_botao || '')}" class="botao-texto" data-opcao="C" data-idx="${idx}">
+                <div class="opcao-remover">
+                    <input type="checkbox" id="removerC_${idx}" data-opcao="C" data-idx="${idx}" ${p.opcao_c_remover ? 'checked' : ''}>
+                    <label for="removerC_${idx}">❌ Remover</label>
+                </div>
             </div>
             
             <div class="opcao-item">
                 <span class="opcao-simbolo" style="color: #f1c40f;">■</span>
                 <input type="text" placeholder="Texto completo (ex: Salvador)" value="${escapeHtml(p.opcao_d || '')}" class="resposta-texto" data-opcao="D" data-idx="${idx}">
                 <input type="text" placeholder="Texto curto (ex: SA)" value="${escapeHtml(p.opcao_d_botao || '')}" class="botao-texto" data-opcao="D" data-idx="${idx}">
+                <div class="opcao-remover">
+                    <input type="checkbox" id="removerD_${idx}" data-opcao="D" data-idx="${idx}" ${p.opcao_d_remover ? 'checked' : ''}>
+                    <label for="removerD_${idx}">❌ Remover</label>
+                </div>
             </div>
             
             <div class="pergunta-footer">
@@ -315,6 +332,7 @@ function renderizarPerguntas() {
         </div>
     `).join('');
     
+    // Event listeners para upload de imagens
     document.querySelectorAll('.upload-imagem-edit').forEach(input => {
         input.addEventListener('change', async (e) => {
             const idx = parseInt(e.target.dataset.idx);
@@ -336,13 +354,15 @@ function renderizarPerguntas() {
         });
     });
     
-    document.querySelectorAll('.pergunta-texto').forEach(input => {
-        input.addEventListener('change', (e) => {
+    // Event listeners para textarea
+    document.querySelectorAll('.pergunta-texto-area').forEach(textarea => {
+        textarea.addEventListener('change', (e) => {
             const idx = parseInt(e.target.dataset.idx);
             perguntasAtuais[idx].texto = e.target.value;
         });
     });
     
+    // Event listeners para campos de texto
     document.querySelectorAll('.resposta-texto').forEach(input => {
         input.addEventListener('change', (e) => {
             const idx = parseInt(e.target.dataset.idx);
@@ -356,6 +376,15 @@ function renderizarPerguntas() {
             const idx = parseInt(e.target.dataset.idx);
             const opcao = e.target.dataset.opcao.toLowerCase();
             perguntasAtuais[idx][`opcao_${opcao}_botao`] = e.target.value;
+        });
+    });
+    
+    // Event listeners para checkboxes de remover
+    document.querySelectorAll('.opcao-remover input[type="checkbox"]').forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+            const idx = parseInt(e.target.dataset.idx);
+            const opcao = e.target.dataset.opcao.toLowerCase();
+            perguntasAtuais[idx][`opcao_${opcao}_remover`] = e.target.checked;
         });
     });
     
@@ -380,12 +409,16 @@ function adicionarPergunta() {
         imagem_url: null,
         opcao_a: '',
         opcao_a_botao: '',
+        opcao_a_remover: false,
         opcao_b: '',
         opcao_b_botao: '',
+        opcao_b_remover: false,
         opcao_c: '',
         opcao_c_botao: '',
+        opcao_c_remover: false,
         opcao_d: '',
         opcao_d_botao: '',
+        opcao_d_remover: false,
         correta: 'A',
         tempo: 15
     });
@@ -479,28 +512,50 @@ function abrirApresentador() {
     window.open(`/apresentador?codigo=${codigoSalaAtual}`, '_blank');
 }
 
-// ============ HISTÓRICO ============
-function carregarHistorico() {
-    fetch('/api/historico')
+// ============ HISTÓRICO EM ARQUIVO ============
+function carregarHistoricoArquivos() {
+    fetch('/api/historico/listar')
         .then(res => res.json())
         .then(data => {
             if (data.sucesso) {
-                const lista = document.getElementById('listaHistorico');
-                lista.innerHTML = data.historico.map(h => `
-                    <div class="historico-card">
-                        <strong>📅 ${new Date(h.data_hora).toLocaleString()}</strong><br>
-                        🎯 Quiz ID: ${h.quiz_id}<br>
-                        🔢 Código: ${h.codigo}
-                    </div>
-                `).join('');
+                const lista = document.getElementById('listaHistoricoArquivos');
+                if (data.arquivos.length === 0) {
+                    lista.innerHTML = '<div class="empty-state">Nenhum histórico encontrado.</div>';
+                } else {
+                    lista.innerHTML = data.arquivos.map(a => `
+                        <div class="historico-item">
+                            <span>
+                                📄 ${a.nome}
+                                <span style="color: #7f8c8d; font-size: 0.8em; margin-left: 10px;">
+                                    ${new Date(a.data).toLocaleString()}
+                                </span>
+                            </span>
+                            <div>
+                                <button onclick="baixarHistorico('${a.nome}')" class="btn-pequeno">📥 Baixar</button>
+                                <button onclick="deletarHistorico('${a.nome}')" class="btn-pequeno-danger">🗑️</button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
             }
         });
 }
 
-function deletarHistorico() {
-    if (confirm('Deletar todo o histórico?')) {
-        fetch('/api/historico/deletar', { method: 'DELETE' })
-            .then(() => carregarHistorico());
+function baixarHistorico(nome) {
+    window.open(`/api/historico/baixar/${encodeURIComponent(nome)}`, '_blank');
+}
+
+function deletarHistorico(nome) {
+    if (confirm(`Deletar o arquivo "${nome}"?`)) {
+        fetch(`/api/historico/deletar/${encodeURIComponent(nome)}`, { method: 'DELETE' })
+            .then(() => carregarHistoricoArquivos());
+    }
+}
+
+function deletarTodosHistoricos() {
+    if (confirm('Deletar todos os arquivos de histórico?')) {
+        fetch('/api/historico/deletar-todos', { method: 'DELETE' })
+            .then(() => carregarHistoricoArquivos());
     }
 }
 
@@ -511,7 +566,7 @@ function mostrarTab(tab) {
     const tabName = tab.charAt(0).toUpperCase() + tab.slice(1);
     document.getElementById(`tab${tabName}`).style.display = 'block';
     document.querySelectorAll('.tab-btn')[tabs[tab]].classList.add('active');
-    if (tab === 'historico') carregarHistorico();
+    if (tab === 'historico') carregarHistoricoArquivos();
 }
 
 function escapeHtml(text) {

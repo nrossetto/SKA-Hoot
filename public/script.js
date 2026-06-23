@@ -65,15 +65,15 @@ function conectarServidor() {
     });
     
     socket.on('nova-pergunta-jogador', (data) => {
-        mostrarPergunta(data.pergunta, data.botoes);
+        mostrarPergunta(data.pergunta, data.botoes, data.removidas);
     });
     
     socket.on('atualizar-timer', (tempo) => {
         const barra = document.getElementById('tempoBar');
         if (barra) {
-            const total = 15; // Valor padrão, pode ser melhorado
+            const total = 15;
             const pct = (tempo / total) * 100;
-            barra.style.width = `${pct}%`;
+            barra.style.width = `${Math.max(0, pct)}%`;
             if (pct < 30) barra.style.backgroundColor = '#e74c3c';
             else if (pct < 60) barra.style.backgroundColor = '#f39c12';
             else barra.style.backgroundColor = '#f1c40f';
@@ -105,7 +105,6 @@ function conectarServidor() {
     });
     
     socket.on('mostrar-ranking', () => {
-        // Restaurar interface para próxima pergunta
         document.querySelector('.respostas-grid').style.display = 'grid';
         document.getElementById('perguntaContainer').innerHTML = `
             <div class="tempo-restante">
@@ -134,12 +133,11 @@ function conectarServidor() {
     });
     
     socket.on('erro', (msg) => {
-        alert(msg);
-        location.reload();
+        alert('⚠️ ' + msg);
     });
 }
 
-function mostrarPergunta(pergunta, botoes) {
+function mostrarPergunta(pergunta, botoes, removidas) {
     aguardandoResposta = true;
     tempoAtual = pergunta.tempo;
     
@@ -152,10 +150,22 @@ function mostrarPergunta(pergunta, botoes) {
         imgDiv.innerHTML = '';
     }
     
+    // Atualizar textos dos botões (apenas símbolos + texto curto)
     document.getElementById('botaoA').innerHTML = botoes.A || 'A';
     document.getElementById('botaoB').innerHTML = botoes.B || 'B';
     document.getElementById('botaoC').innerHTML = botoes.C || 'C';
     document.getElementById('botaoD').innerHTML = botoes.D || 'D';
+    
+    // Mostrar/esconder botões baseado nas opções removidas
+    const btnA = document.getElementById('btnA');
+    const btnB = document.getElementById('btnB');
+    const btnC = document.getElementById('btnC');
+    const btnD = document.getElementById('btnD');
+    
+    btnA.style.display = removidas && removidas.includes('A') ? 'none' : 'flex';
+    btnB.style.display = removidas && removidas.includes('B') ? 'none' : 'flex';
+    btnC.style.display = removidas && removidas.includes('C') ? 'none' : 'flex';
+    btnD.style.display = removidas && removidas.includes('D') ? 'none' : 'flex';
     
     document.querySelector('.respostas-grid').style.display = 'grid';
     

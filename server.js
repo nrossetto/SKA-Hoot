@@ -225,17 +225,28 @@ app.post('/api/quiz/salvar', async (req, res) => {
   if (isNaN(quizId) || !nome || nome.trim() === '') {
     return res.json({ sucesso: false, erro: 'Dados inválidos' });
   }
+  
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    
+    // ===== VERIFICAR SE O QUIZ EXISTE =====
+    const quizExiste = await client.query('SELECT id FROM quizzes WHERE id = $1', [quizId]);
+    if (quizExiste.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.json({ sucesso: false, erro: 'Quiz não encontrado. Recrie o quiz.' });
+    }
+    
     await client.query('UPDATE quizzes SET nome = $1, cor_fundo = $2, musica_url = $3 WHERE id = $4',
       [nome.trim(), cor_fundo || '#667eea', musica_url || null, quizId]);
     await client.query('DELETE FROM perguntas WHERE quiz_id = $1', [quizId]);
+    
     const perguntasData = JSON.parse(perguntas);
     if (perguntasData.length === 0) {
       await client.query('ROLLBACK');
       return res.json({ sucesso: false, erro: 'Quiz deve ter pelo menos uma pergunta' });
     }
+    
     for (const p of perguntasData) {
       await client.query(`
         INSERT INTO perguntas (
@@ -266,6 +277,7 @@ app.post('/api/quiz/salvar', async (req, res) => {
         parseInt(p.tempo) || 15
       ]);
     }
+    
     await client.query('COMMIT');
     res.json({ sucesso: true });
   } catch (err) {

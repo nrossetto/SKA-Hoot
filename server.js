@@ -810,6 +810,7 @@ io.on('connection', (socket) => {
     };
   }
 
+  // ============ ENVIAR PERGUNTA (COM FILTRO DE OPÇÕES REMOVIDAS) ============
   function enviarPergunta(codigo, indice) {
     const sala = salas[codigo];
     if (!sala || indice >= sala.perguntas.length) {
@@ -836,23 +837,24 @@ io.on('connection', (socket) => {
     
     const opcoesDisponiveis = ['A', 'B', 'C', 'D'].filter(o => !opcoesRemovidas.includes(o));
     
+    // Criar objeto de opções APENAS com as disponíveis para o apresentador
+    const opcoesApresentador = {};
+    const botoesApresentador = {};
+    const opcoesTexto = ['A', 'B', 'C', 'D'];
+    for (const letra of opcoesTexto) {
+      if (!opcoesRemovidas.includes(letra)) {
+        opcoesApresentador[letra] = pergunta[`opcao_${letra.toLowerCase()}`];
+        botoesApresentador[letra] = pergunta[`opcao_${letra.toLowerCase()}_botao`] || letra;
+      }
+    }
+    
     const dadosApresentador = {
       pergunta: {
         texto: pergunta.texto,
         imagem_url: pergunta.imagem_url,
         tempo: pergunta.tempo,
-        opcoes: {
-          A: pergunta.opcao_a,
-          B: pergunta.opcao_b,
-          C: pergunta.opcao_c,
-          D: pergunta.opcao_d
-        },
-        botoes: {
-          A: pergunta.opcao_a_botao || 'A',
-          B: pergunta.opcao_b_botao || 'B',
-          C: pergunta.opcao_c_botao || 'C',
-          D: pergunta.opcao_d_botao || 'D'
-        },
+        opcoes: opcoesApresentador,
+        botoes: botoesApresentador,
         removidas: opcoesRemovidas,
         disponiveis: opcoesDisponiveis
       },

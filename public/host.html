@@ -59,8 +59,6 @@
             font-weight: bold;
         }
         .btn-copiar:hover { background: #2980b9; }
-        
-        /* Botões de Export/Import */
         .btn-export {
             background: #27ae60;
             color: white;
@@ -73,7 +71,6 @@
             transition: background 0.2s;
         }
         .btn-export:hover { background: #2ecc71; }
-        
         .btn-import {
             background: #f39c12;
             color: white;
@@ -86,7 +83,6 @@
             margin-bottom: 15px;
         }
         .btn-import:hover { background: #e67e22; }
-        
         .import-area {
             background: #34495e;
             padding: 15px;
@@ -106,25 +102,70 @@
         .import-area label {
             color: #ecf0f1;
         }
-        
         .quiz-card-buttons {
             display: flex;
             gap: 8px;
             flex-wrap: wrap;
             margin-top: 10px;
         }
+        .pergunta-texto-area {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            font-family: inherit;
+            resize: vertical;
+            margin: 5px 0;
+        }
+        .opcao-remover {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: 5px;
+        }
+        .opcao-remover input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        .opcao-remover label {
+            font-size: 0.85em;
+            color: #e74c3c;
+            cursor: pointer;
+        }
+        .btn-historico {
+            background: #8e44ad;
+            color: white;
+            padding: 6px 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85em;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        .btn-historico:hover { background: #9b59b6; }
+        .historico-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .historico-item button {
+            margin-left: 10px;
+        }
     </style>
 </head>
 <body class="host-body">
     <div class="host-preparacao">
-        <!-- Tela de Login -->
         <div id="telaLogin" class="login-container">
             <h1>🔐 SKA-HOOT Host</h1>
             <input type="password" id="senha" placeholder="Senha mestra" class="input-grande">
             <button onclick="verificarSenha()" class="btn-principal">Entrar</button>
         </div>
         
-        <!-- Dashboard -->
         <div id="telaDashboard" style="display:none;">
             <div class="dashboard-header">
                 <h1>🎮 SKA-HOOT - Preparação</h1>
@@ -139,9 +180,7 @@
                 <button class="tab-btn" onclick="mostrarTab('historico')">📜 Histórico</button>
             </div>
             
-            <!-- Quizzes -->
             <div id="tabQuizzes" class="tab-content">
-                <!-- Área de Import -->
                 <div class="import-area">
                     <label>📤 Importar Quiz:</label>
                     <input type="file" id="fileImport" accept=".json">
@@ -152,7 +191,6 @@
                 <button onclick="criarNovoQuiz()" class="btn-secundario">+ Criar Novo Quiz</button>
             </div>
             
-            <!-- Editor -->
             <div id="tabEditar" class="tab-content" style="display:none;">
                 <div class="editor-header">
                     <select id="quizSelecionado" onchange="carregarQuiz(this.value)">
@@ -165,7 +203,6 @@
                 <button onclick="adicionarPergunta()" class="btn-secundario">+ Adicionar Pergunta</button>
             </div>
             
-            <!-- Criar Sala -->
             <div id="tabSala" class="tab-content" style="display:none;">
                 <div class="jogar-config">
                     <select id="quizJogar" onchange="selecionarQuizJogar(this.value)">
@@ -179,21 +216,13 @@
                         <h3>✅ Sala criada!</h3>
                         <div class="codigo-grande" id="codigoDisplay">0000</div>
                         <button class="btn-copiar" onclick="copiarCodigo()">📋 Copiar código</button>
-                        
                         <hr style="border-color: #555; margin: 20px 0;">
-                        
-                        <button class="btn-abrir-apresentador" onclick="abrirApresentador()">
-                            🖥️ ABRIR APRESENTADOR
-                        </button>
-                        <p class="instrucoes">
-                            O apresentador controla todo o jogo. Os jogadores acessam:<br>
-                            <strong>https://ska-hoot.onrender.com</strong> com o código acima
-                        </p>
+                        <button class="btn-abrir-apresentador" onclick="abrirApresentador()">🖥️ ABRIR APRESENTADOR</button>
+                        <p class="instrucoes">Os jogadores acessam: <strong>https://ska-hoot.onrender.com</strong> com o código acima</p>
                     </div>
                 </div>
             </div>
             
-            <!-- Configurações -->
             <div id="tabConfig" class="tab-content" style="display:none;">
                 <div class="config-panel">
                     <h3>🎨 Personalização</h3>
@@ -212,13 +241,12 @@
                 </div>
             </div>
             
-            <!-- Histórico -->
             <div id="tabHistorico" class="tab-content" style="display:none;">
                 <div class="historico-header">
-                    <button onclick="carregarHistorico()" class="btn-pequeno">🔄 Atualizar</button>
-                    <button onclick="deletarHistorico()" class="btn-pequeno-danger">🗑️ Deletar tudo</button>
+                    <button onclick="carregarHistoricoArquivos()" class="btn-pequeno">🔄 Atualizar</button>
+                    <button onclick="deletarTodosHistoricos()" class="btn-pequeno-danger">🗑️ Deletar tudo</button>
                 </div>
-                <div id="listaHistorico" class="historico-lista"></div>
+                <div id="listaHistoricoArquivos" class="historico-lista"></div>
             </div>
         </div>
     </div>

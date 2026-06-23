@@ -40,7 +40,7 @@
         }
         .header h1 { font-size: 1.8em; }
         .codigo {
-            font-size: 3em; /* MAIOR */
+            font-size: 3em;
             background: #27ae60;
             padding: 10px 35px;
             border-radius: 15px;
@@ -64,7 +64,7 @@
             min-height: 400px;
         }
         
-        /* QR CODE - MAIOR E CENTRALIZADO */
+        /* QR CODE */
         .qr-container {
             background: white;
             padding: 25px;
@@ -190,11 +190,6 @@
             font-weight: bold;
             color: white;
             text-align: center;
-        }
-        .opcao-removida {
-            opacity: 0.3;
-            text-decoration: line-through;
-            background: #95a5a6 !important;
         }
         .opcao-a { background: #e74c3c; }
         .opcao-b { background: #2ecc71; }
@@ -376,7 +371,7 @@
             </div>
         </div>
         
-        <!-- QR CODE - MAIOR E CENTRALIZADO -->
+        <!-- QR CODE -->
         <div class="qr-container" id="qrContainer">
             <div id="qrcode"></div>
             <p>📱 Aponte a câmera para entrar no jogo</p>
@@ -403,13 +398,8 @@
                 <div class="pergunta-texto" id="perguntaTexto">Qual a capital do Brasil?</div>
                 <div class="timer"><div class="timer-bar" id="timerBar"></div></div>
                 <div class="timer-info" id="timerTexto">⏱ 15 segundos</div>
-                <div class="opcoes-grid" id="opcoesGrid">
-                    <div class="opcao opcao-a" id="opcaoA">🔴 ★ A - Brasília</div>
-                    <div class="opcao opcao-b" id="opcaoB">🟢 ▲ B - São Paulo</div>
-                    <div class="opcao opcao-c" id="opcaoC">🔵 ● C - Rio de Janeiro</div>
-                    <div class="opcao opcao-d" id="opcaoD">🟡 ■ D - Salvador</div>
-                </div>
-                <div style="margin-top: 15px; color: #7f8c8d; font-size: 0.9em;" id="botoesInfo">Botões: BRA | SP | RIO | SA</div>
+                <div class="opcoes-grid" id="opcoesGrid"></div>
+                <div style="margin-top: 15px; color: #7f8c8d; font-size: 0.9em;" id="botoesInfo"></div>
                 <div style="margin-top: 5px; color: #e74c3c; font-size: 0.85em;" id="removidasInfo"></div>
             </div>
             
@@ -497,10 +487,9 @@
             });
         }
         
-        // ============ OCULTAR QR CODE QUANDO O JOGO COMEÇAR ============
+        // ============ OCULTAR QR ============
         function ocultarQR() {
-            const qrContainer = document.getElementById('qrContainer');
-            qrContainer.classList.add('oculto');
+            document.getElementById('qrContainer').classList.add('oculto');
         }
         
         // ============ CONEXÃO ============
@@ -533,7 +522,6 @@
             });
             
             socket.on('jogo-iniciado', () => {
-                // OCULTAR QR QUANDO O JOGO COMEÇAR
                 ocultarQR();
             });
             
@@ -627,29 +615,38 @@
                 imgDiv.innerHTML = '';
             }
             
-            // Opções com símbolos
-            document.getElementById('opcaoA').innerHTML = `🔴 ★ ${p.opcoes.A}`;
-            document.getElementById('opcaoB').innerHTML = `🟢 ▲ ${p.opcoes.B}`;
-            document.getElementById('opcaoC').innerHTML = `🔵 ● ${p.opcoes.C}`;
-            document.getElementById('opcaoD').innerHTML = `🟡 ■ ${p.opcoes.D}`;
+            // Gerar opções APENAS com as disponíveis
+            const opcoesGrid = document.getElementById('opcoesGrid');
+            const letras = ['A', 'B', 'C', 'D'];
+            const opcoesHtml = [];
+            const cores = { A: '🔴', B: '🟢', C: '🔵', D: '🟡' };
+            const simbolos = { A: '★', B: '▲', C: '●', D: '■' };
             
-            // Marcar opções removidas
-            const removidas = p.removidas || [];
-            ['A', 'B', 'C', 'D'].forEach(letra => {
-                const el = document.getElementById(`opcao${letra}`);
-                if (removidas.includes(letra)) {
-                    el.classList.add('opcao-removida');
-                } else {
-                    el.classList.remove('opcao-removida');
-                }
-            });
+            for (const letra of letras) {
+                if (p.removidas && p.removidas.includes(letra)) continue;
+                
+                const opcaoTexto = p.opcoes[letra] || '';
+                const classeCor = `opcao-${letra.toLowerCase()}`;
+                
+                opcoesHtml.push(`
+                    <div class="opcao ${classeCor}" id="opcao${letra}">
+                        ${cores[letra]} ${simbolos[letra]} ${letra} - ${opcaoTexto}
+                    </div>
+                `);
+            }
             
-            document.getElementById('botoesInfo').innerHTML = 
-                `Botões: ${p.botoes.A} | ${p.botoes.B} | ${p.botoes.C} | ${p.botoes.D}`;
+            opcoesGrid.innerHTML = opcoesHtml.join('');
             
-            if (removidas.length > 0) {
+            // Informações dos botões
+            const botoesInfo = letras
+                .filter(l => !(p.removidas && p.removidas.includes(l)))
+                .map(l => `${p.botoes[l] || l}`)
+                .join(' | ');
+            document.getElementById('botoesInfo').innerHTML = `Botões: ${botoesInfo}`;
+            
+            if (p.removidas && p.removidas.length > 0) {
                 document.getElementById('removidasInfo').innerHTML = 
-                    `❌ Opções removidas: ${removidas.join(', ')}`;
+                    `❌ Opções removidas: ${p.removidas.join(', ')}`;
             } else {
                 document.getElementById('removidasInfo').innerHTML = '';
             }
